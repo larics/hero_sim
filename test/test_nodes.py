@@ -14,8 +14,9 @@ from hero_sim.kinematics import yaw_to_quat  # noqa: E402
 
 SCENARIO = """
 ground_robots:
-  - name: ranger_1
+  - name: scout_1
     pose: {x: 1.0, y: 0.0, yaw: 1.5707963267948966}
+    model: scout
   - name: herover_1
     pose: {x: 0.0, y: 0.0, yaw: 0.0}
     drive: diff
@@ -81,17 +82,17 @@ def test_crazyflie_server_update_all(make):
 def test_ground_robots_integrate_cmd_vel(make):
     from hero_sim.ground_robots import GroundRobotSim
     sim = make(GroundRobotSim)
-    ranger, herover = sim._robots
-    assert (ranger.name, ranger.drive, herover.drive) == ('ranger_1', 'omni', 'diff')
+    scout, herover = sim._robots
+    assert (scout.name, scout.drive, herover.drive) == ('scout_1', 'omni', 'diff')
 
-    sim._on_cmd_vel(ranger, twist(vx=1.0, vy=1.0))
+    sim._on_cmd_vel(scout, twist(vx=1.0, vy=1.0))
     sim._on_cmd_vel(herover, twist(vx=1.0, vy=1.0, wz=9.0))
     assert (herover.vy, herover.wz) == (0.0, 2.0)  # diff drops vy; yaw rate clamped
 
     for _ in range(10):  # 1 s at 10 Hz
         sim._tick()
-    # ranger faces +y: forward -> +y, left -> -x
-    assert (ranger.x, ranger.y) == pytest.approx((0.0, 1.0))
+    # scout faces +y: forward -> +y, left -> -x
+    assert (scout.x, scout.y) == pytest.approx((0.0, 1.0))
 
 
 def test_ground_robots_publish_pose(make):
@@ -99,7 +100,7 @@ def test_ground_robots_publish_pose(make):
     sim = make(GroundRobotSim)
     got = []
     sub_node = make(lambda: rclpy.create_node('pose_listener'))
-    sub_node.create_subscription(PoseStamped, '/ranger_1/pose', got.append, 10)
+    sub_node.create_subscription(PoseStamped, '/scout_1/pose', got.append, 10)
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(sim)
     executor.add_node(sub_node)
@@ -108,9 +109,40 @@ def test_ground_robots_publish_pose(make):
         if got:
             break
     executor.shutdown()
-    assert got, 'no pose received on /ranger_1/pose'
+    assert got, 'no pose received on /scout_1/pose'
     assert got[-1].header.frame_id == 'world'
     assert got[-1].pose.position.x == pytest.approx(1.0)
+
+
+def test_robot_models_latched_and_frame_locked(make):
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from visualization_msgs.msg import Marker, MarkerArray
+    from hero_sim.robot_models import TOPIC, RobotModels
+
+    publisher = make(RobotModels)  # publishes once, before anyone subscribes
+    got = []
+    listener = make(lambda: rclpy.create_node('rviz_stand_in'))
+    listener.create_subscription(
+        MarkerArray, TOPIC, got.append,
+        QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(publisher)
+    executor.add_node(listener)
+    for _ in range(50):
+        executor.spin_once(timeout_sec=0.05)
+        if got:
+            break
+    executor.shutdown()
+    assert got, 'late subscriber did not get the latched MarkerArray'
+
+    markers = got[0].markers
+    # herover_1 has no model -> TF only; scout_1 and both CFs get meshes
+    assert [(m.header.frame_id, m.ns) for m in markers] == [
+        ('cf_1', 'crazyflie'), ('cf_2', 'crazyflie'), ('scout_1', 'scout')]
+    assert all(m.type == Marker.MESH_RESOURCE and m.frame_locked
+               and m.mesh_use_embedded_materials for m in markers)
+    assert markers[2].mesh_resource == 'package://hero_sim/models/scout/scout.glb'
+    assert len({(m.ns, m.id) for m in markers}) == len(markers)
 
 
 class _Capture:

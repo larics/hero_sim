@@ -70,17 +70,17 @@ Visualization Manager:
       Frames:
         All Enabled: false
         cf_1:
-          Value: true
+          Value: false
         cf_2:
-          Value: true
+          Value: false
         cf_3:
-          Value: true
+          Value: false
         cf_4:
-          Value: true
+          Value: false
         herover_1:
-          Value: true
-        ranger_1:
-          Value: true
+          Value: false
+        scout_1:
+          Value: false
         world:
           Value: true
       Marker Scale: 1
@@ -100,22 +100,36 @@ Visualization Manager:
             {}
           herover_1:
             {}
-          ranger_1:
+          scout_1:
             {}
       Update Interval: 0
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
+      Name: Robot models
+      Namespaces:
+        crazyflie: true
+        herover: true
+        scout: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /hero_sim/robot_models
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: false
       Name: MarkerArray
       Namespaces:
-        agents: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /swarm/agent_markers
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: MarkerArray
@@ -359,7 +373,7 @@ Visualization Manager:
         Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /ranger_1/path
+        Value: /scout_1/path
       Value: true
     - Alpha: 0.699999988079071
       Class: rviz_default_plugins/Map
@@ -467,8 +481,8 @@ Visualization Manager:
         spring_label: false
         spring_predicted: false
         spring_predicted_label: false
-        spring_rollout_nodes: true
-        spring_rollout_tracks: true
+        spring_rollout_nodes: false
+        spring_rollout_tracks: false
         spring_route: false
       Topic:
         Depth: 5
@@ -523,7 +537,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.6952836513519287
+      Distance: 4.246407508850098
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -538,10 +552,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.8047968745231628
+      Pitch: 0.6297969818115234
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.6904146671295166
+      Yaw: 3.6054160594940186
     Saved: ~
 Window Geometry:
   Displays:
@@ -561,5 +575,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1548
-  X: 3572
+  X: 1012
   Y: 40

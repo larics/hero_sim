@@ -4,15 +4,18 @@
 # Kinematic ground robots. Each one subscribes to /<name>/cmd_vel (body-frame
 # Twist, held until the next message) and publishes /<name>/pose plus TF
 # world -> <name> at z = 0.
-#   drive: omni  holonomic, honors linear.x, linear.y and angular.z (default)
-#   drive: diff  non-holonomic, linear.y is ignored
+#   drive: omni    holonomic, honors linear.x, linear.y and angular.z (default)
+#   drive: diff    non-holonomic, linear.y is ignored
+#   model: scout | herover   RViz mesh drawn on the robot's frame; leave out for TF axes only
 ground_robots:
-  - name: ranger_1
+  - name: scout_1
     pose: {x: 0.0, y: 0.0, yaw: 0.0}   # m, m, rad
     drive: omni
+    model: scout
   - name: herover_1
     pose: {x: 0.0, y: 0.6, yaw: 0.0}
     drive: diff
+    model: herover
 
 # Crazyflies, named cf_1, cf_2, ... in list order (reordering renumbers them).
 # Same topics/services as crazyswarm2's crazyflie_server, plus /all/* broadcasts.
@@ -30,4 +33,5 @@ sim:
   attach: auto               # sim_attach (/sim/attach_agent dock ride-along): auto runs it
                              # only if hero_mrs_msgs is installed; true | false to force
   rviz: true                 # RViz with config/sim.rviz
+  models: true               # robot meshes in RViz (crazyflies, and ground robots with a model)
   map: icuas26_1             # octomap: maps/<name>.bt, a path to a .bt, or null for none

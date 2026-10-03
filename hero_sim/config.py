@@ -22,7 +22,16 @@ SIM_DEFAULTS = {
     'cf_battery_drain': 0.025,   # V/s while flying (starts at 4.2 V, floor 3.0 V)
     'attach': 'auto',            # sim_attach dock ride-along: auto | true | false (see attach_enabled)
     'rviz': True,                # open RViz with config/sim.rviz
+    'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
+}
+
+# RViz meshes by model name, relative to models/. Crazyflies always use
+# 'crazyflie'; a ground robot uses its `model:` key (none -> TF axes only).
+MODEL_MESHES = {
+    'crazyflie': 'crazyflie/crazyflie.dae',
+    'herover': 'herover/herover.glb',
+    'scout': 'scout/scout.glb',
 }
 
 DRIVES = ('omni', 'diff')
@@ -37,6 +46,7 @@ class GroundRobot:
     y: float
     yaw: float
     drive: str
+    model: str = None  # key of MODEL_MESHES, or None for no mesh
 
 
 @dataclass(frozen=True)
@@ -138,15 +148,19 @@ def _pose(entry, where, axes):
 
 def _ground_robot(i, entry):
     where = f'ground_robots[{i}]'
-    _check_keys(entry, ('name', 'pose', 'drive'), where)
+    _check_keys(entry, ('name', 'pose', 'drive', 'model'), where)
     name = entry.get('name')
     if not isinstance(name, str) or not name:
         raise ValueError(f'{where}: name is required')
     drive = str(entry.get('drive', 'omni')).lower()
     if drive not in DRIVES:
         raise ValueError(f'{where} ({name}): drive must be one of {DRIVES}, got {drive!r}')
+    model = entry.get('model')
+    if model is not None and model not in MODEL_MESHES:
+        raise ValueError(f'{where} ({name}): model must be one of {sorted(MODEL_MESHES)} '
+                         f'or left out, got {model!r}')
     x, y, yaw = _pose(entry, f'{where} ({name})', ('x', 'y', 'yaw'))
-    return GroundRobot(name, x, y, yaw, drive)
+    return GroundRobot(name, x, y, yaw, drive, model)
 
 
 def _crazyflie(i, entry):

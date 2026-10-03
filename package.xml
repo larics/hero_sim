@@ -15,6 +15,7 @@
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>visualization_msgs</exec_depend>
   <exec_depend>crazyflie_interfaces</exec_depend>
   <!-- Optional, not declared: hero_mrs_msgs (hero_mrs_control_stack) enables
        sim_attach. sim.launch.py skips that node when it isn't installed. -->

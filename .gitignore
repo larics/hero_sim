@@ -10,3 +10,6 @@ __pycache__/
 
 # personal Claude Code settings
 .claude/settings.local.json
+
+# raw/source meshes; only optimized meshes in models/<name>/ are committed
+models/source/

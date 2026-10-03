@@ -12,12 +12,12 @@ def parse(text):
 def test_minimal_and_defaults():
     s = parse("""
 ground_robots:
-  - name: ranger_1
+  - name: scout_1
 crazyflies:
   - pose: {x: 1.0, y: 2.0, z: 0.03}
   - pose: {x: 3.0}
 """)
-    assert s.ground_robots == (config.GroundRobot('ranger_1', 0.0, 0.0, 0.0, 'omni'),)
+    assert s.ground_robots == (config.GroundRobot('scout_1', 0.0, 0.0, 0.0, 'omni'),)
     assert s.crazyflies == (config.Crazyflie('cf_1', 1.0, 2.0, 0.03),
                             config.Crazyflie('cf_2', 3.0, 0.0, 0.0))
     assert s.sim == config.SIM_DEFAULTS
@@ -35,6 +35,16 @@ def test_sim_override_keeps_other_defaults():
     assert s.sim['ground_rate'] == config.SIM_DEFAULTS['ground_rate']
 
 
+def test_ground_robot_model_is_optional():
+    s = parse('ground_robots: [{name: h, model: herover}, {name: r}]')
+    assert [r.model for r in s.ground_robots] == ['herover', None]
+
+
+def test_model_meshes_exist():
+    for rel in config.MODEL_MESHES.values():
+        assert (CONFIG_DIR.parent / 'models' / rel).is_file(), rel
+
+
 def test_drive_is_case_insensitive():
     s = parse('ground_robots: [{name: h, drive: DIFF}]')
     assert s.ground_robots[0].drive == 'diff'
@@ -46,6 +56,7 @@ def test_drive_is_case_insensitive():
     ('ground_robots: [{name: a, speed: 1}]', "unknown key.*'speed'"),
     ('ground_robots: [{pose: {x: 1}}]', 'name is required'),
     ('ground_robots: [{name: a, drive: tank}]', 'drive must be one of'),
+    ('ground_robots: [{name: a, model: tank}]', 'model must be one of'),
     ('ground_robots: [{name: a}, {name: a}]', 'duplicate ground robot names'),
     ('ground_robots: [{name: cf_1}]\ncrazyflies: [{pose: {}}]', 'clash with crazyflie names'),
     ('crazyflies: [{pose: {yaw: 1}}]', r"crazyflies\[0\] \(cf_1\)\.pose: unknown key"),

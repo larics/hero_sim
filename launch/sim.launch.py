@@ -1,4 +1,4 @@
-"""hero_sim: Crazyflie server, ground robots, sim_attach and RViz from one scenario config.
+"""hero_sim: Crazyflie server, ground robots, sim_attach, RViz + robot meshes from one scenario config.
 
     ros2 launch hero_sim sim.launch.py [config:=<name.yaml | path/to/file.yaml>]
 
@@ -39,6 +39,9 @@ def _actions(context):
         rviz_config = str(config.share_dir() / 'config' / 'sim.rviz')
         actions.append(Node(package='rviz2', executable='rviz2', name='rviz2', output='screen',
                             arguments=['-d', rviz_config]))
+        if sim['models']:
+            actions.append(Node(package='hero_sim', executable='robot_models',
+                                name='robot_models', output='screen', parameters=params))
     return actions
 
 

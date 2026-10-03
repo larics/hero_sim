@@ -2,18 +2,22 @@
 # All keys, and the sim: block defaults, are documented in example.yaml.
 
 ground_robots:
-  - name: ranger_1
+  - name: scout_1
     pose: {x: 0.0, y: 0.0, yaw: 0.0}
     drive: omni
+    model: scout
   - name: herover_1
     pose: {x: 0.0, y: 0.625, yaw: 0.0}
     drive: omni
+    model: herover
   - name: herover_2
     pose: {x: 0.0, y: -0.625, yaw: 0.0}
     drive: omni
+    model: herover
   # - name: herover_3
   #   pose: {x: 0.0127, y: -1.25144, yaw: 0.0}
   #   drive: omni
+  #   model: herover
 
 crazyflies:
   - pose: {x: 0.625, y: 0.0, z: 0.03}      # cf_1
