@@ -1,0 +1,28 @@
+# test_deploy_case2: ported from agilex_sitl hero_sitl/config/test_deploy_case2.yaml.
+# All keys, and the sim: block defaults, are documented in example.yaml.
+
+ground_robots:
+  - name: ranger_1
+    pose: {x: -1.25, y: 0.0, yaw: 0.0}
+    drive: omni
+  - name: herover_1
+    pose: {x: 1.25, y: 0.0, yaw: 0.0}
+    drive: omni
+  # - name: herover_2
+  #   pose: {x: 0.0, y: -0.8, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_3
+  #   pose: {x: 0.0127, y: -1.25144, yaw: 0.0}
+  #   drive: omni
+
+crazyflies:
+  - pose: {x: -0.2, y: 0.0, z: 0.03}     # cf_1
+  - pose: {x: 0.7, y: -0.0, z: 0.03}     # cf_2
+  - pose: {x: -1.625, y: 0.0, z: 0.03}   # cf_3
+  # - pose: {x: 0.113226, y: 0.090581, z: 0.03}
+  # - pose: {x: 0.0, y: 0.6, z: 0.03}
+  # - pose: {x: 0.0, y: -0.8, z: 0.03}
+  # - pose: {x: 0.625, y: 0.0, z: 0.03}
+  # - pose: {x: 1.25, y: -0.624, z: 0.03}
+  # - pose: {x: 1.25, y: 0.624, z: 0.03}
+  # - pose: {x: 1.25, y: 0.0, z: 0.03}

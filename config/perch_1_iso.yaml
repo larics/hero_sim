@@ -1,0 +1,22 @@
+# perch_1_iso: ported from agilex_sitl hero_sitl/config/perch_1_iso.yaml.
+# All keys, and the sim: block defaults, are documented in example.yaml.
+
+ground_robots:
+  # - name: ranger_1
+  #   pose: {x: -0.5, y: 0.0, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_1
+  #   pose: {x: -1.2675, y: -0.006789, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_2
+  #   pose: {x: -0.89556, y: -0.90646, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_3
+  #   pose: {x: 0.0127, y: -1.25144, yaw: 0.0}
+  #   drive: omni
+
+crazyflies:
+  - pose: {x: 0.0, y: 0.0, z: 0.03}   # cf_1
+  # - pose: {x: 0.625, y: 0.625, z: 0.03}
+  # - pose: {x: 0.625, y: -0.625, z: 0.03}
+  # - pose: {x: 0.625, y: -1.2, z: 0.03}

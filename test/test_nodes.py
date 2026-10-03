@@ -1,0 +1,174 @@
+"""Node-level tests: each node built from a scenario file via HERO_SIM_CONFIG."""
+import math
+
+import pytest
+
+rclpy = pytest.importorskip('rclpy')
+pytest.importorskip('crazyflie_interfaces')
+
+from conftest import duration  # noqa: E402
+from crazyflie_interfaces.srv import Arm, Takeoff  # noqa: E402
+from geometry_msgs.msg import PoseStamped, Twist  # noqa: E402
+
+from hero_sim.kinematics import yaw_to_quat  # noqa: E402
+
+SCENARIO = """
+ground_robots:
+  - name: ranger_1
+    pose: {x: 1.0, y: 0.0, yaw: 1.5707963267948966}
+  - name: herover_1
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}
+    drive: diff
+crazyflies:
+  - pose: {x: 0.5, y: 0.5, z: 0.03}
+  - pose: {x: -0.5, y: 0.5, z: 0.03}
+sim: {ground_rate: 10.0, cf_rate: 20.0, cf_battery_drain: 0.1}
+"""
+
+
+@pytest.fixture()
+def make(rclpy_context, scenario_file):
+    scenario_file(SCENARIO)
+    nodes = []
+
+    def build(cls):
+        n = cls()
+        nodes.append(n)
+        return n
+    yield build
+    for n in nodes:
+        n.destroy_node()
+
+
+def twist(vx=0.0, vy=0.0, wz=0.0):
+    msg = Twist()
+    msg.linear.x, msg.linear.y, msg.angular.z = vx, vy, wz
+    return msg
+
+
+def test_crazyflie_server_builds_drones_from_config(make):
+    from hero_sim.crazyflie_server import CrazyflieServer
+    server = make(CrazyflieServer)
+    assert server.get_name() == 'crazyflie_server'
+    assert list(server.drones) == ['cf_1', 'cf_2']
+    assert list(server.drones['cf_2'].position) == [-0.5, 0.5, 0.03]
+    assert server.drones['cf_1'].dt == pytest.approx(0.05)
+    assert server.drones['cf_1'].battery_drain == 0.1
+
+
+def test_crazyflie_server_broadcast_respects_group_mask(make):
+    from hero_sim.crazyflie_server import CrazyflieServer
+    server = make(CrazyflieServer)
+    server.drones['cf_1'].group_mask = 0b01
+    server.drones['cf_2'].group_mask = 0b10
+    req = Takeoff.Request(height=1.0, duration=duration(1), group_mask=0b01)
+    server._broadcast('takeoff', '_takeoff_cb', req, Takeoff.Response())
+    assert server.drones['cf_1'].flying and not server.drones['cf_2'].flying
+
+    server._broadcast('arm', '_arm_cb', Arm.Request(arm=False), Arm.Response())
+    assert not any(d.armed for d in server.drones.values())
+
+
+def test_crazyflie_server_update_all(make):
+    from hero_sim.crazyflie_server import CrazyflieServer
+    server = make(CrazyflieServer)
+    req = Takeoff.Request(height=1.0, duration=duration(1))
+    server._broadcast('takeoff', '_takeoff_cb', req, Takeoff.Response())
+    server._update_all()
+    assert all(d.position[2] > 0.03 for d in server.drones.values())
+
+
+def test_ground_robots_integrate_cmd_vel(make):
+    from hero_sim.ground_robots import GroundRobotSim
+    sim = make(GroundRobotSim)
+    ranger, herover = sim._robots
+    assert (ranger.name, ranger.drive, herover.drive) == ('ranger_1', 'omni', 'diff')
+
+    sim._on_cmd_vel(ranger, twist(vx=1.0, vy=1.0))
+    sim._on_cmd_vel(herover, twist(vx=1.0, vy=1.0, wz=9.0))
+    assert (herover.vy, herover.wz) == (0.0, 2.0)  # diff drops vy; yaw rate clamped
+
+    for _ in range(10):  # 1 s at 10 Hz
+        sim._tick()
+    # ranger faces +y: forward -> +y, left -> -x
+    assert (ranger.x, ranger.y) == pytest.approx((0.0, 1.0))
+
+
+def test_ground_robots_publish_pose(make):
+    from hero_sim.ground_robots import GroundRobotSim
+    sim = make(GroundRobotSim)
+    got = []
+    sub_node = make(lambda: rclpy.create_node('pose_listener'))
+    sub_node.create_subscription(PoseStamped, '/ranger_1/pose', got.append, 10)
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(sim)
+    executor.add_node(sub_node)
+    for _ in range(50):
+        executor.spin_once(timeout_sec=0.05)
+        if got:
+            break
+    executor.shutdown()
+    assert got, 'no pose received on /ranger_1/pose'
+    assert got[-1].header.frame_id == 'world'
+    assert got[-1].pose.position.x == pytest.approx(1.0)
+
+
+class _Capture:
+    def __init__(self):
+        self.msgs = []
+
+    def publish(self, msg):
+        self.msgs.append(msg)
+
+
+def _pose(x, y, z, yaw):
+    msg = PoseStamped()
+    msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = x, y, z
+    o = msg.pose.orientation
+    o.x, o.y, o.z, o.w = yaw_to_quat(yaw)
+    return msg
+
+
+def test_attach_follows_parent_in_body_frame(rclpy_context):
+    pytest.importorskip('hero_mrs_msgs')
+    from hero_mrs_msgs.srv import AttachAgent
+    from hero_sim.attach import SimAttachNode
+
+    node = SimAttachNode()
+    try:
+        node._poses['herover_1'] = _pose(1.0, 0.0, 0.0, math.pi / 2)
+        node._poses['cf_1'] = _pose(1.0, 1.0, 0.2, math.pi / 2)  # 1 m ahead of the parent
+        req = AttachAgent.Request(child_id='cf_1', parent_id='herover_1', attach=True)
+        resp = node._on_request(req, AttachAgent.Response())
+        assert resp.success, resp.message
+
+        couple = node._couples['cf_1']
+        real_publisher, capture = couple.publisher, _Capture()
+        couple.publisher = capture
+        node._poses['herover_1'] = _pose(2.0, 0.0, 0.0, 0.0)  # parent turned to face +x
+        node._follow_tick()
+        couple.publisher = real_publisher  # detach must destroy a real publisher
+        msg = capture.msgs[-1]
+        assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((3.0, 0.0, 0.2, 0.0))
+
+        req.attach = False
+        assert node._on_request(req, AttachAgent.Response()).success
+        assert 'cf_1' not in node._couples
+        assert node._on_request(req, AttachAgent.Response()).success  # idempotent
+    finally:
+        node.destroy_node()
+
+
+def test_attach_fails_without_pose(rclpy_context):
+    pytest.importorskip('hero_mrs_msgs')
+    from hero_mrs_msgs.srv import AttachAgent
+    from hero_sim.attach import SimAttachNode
+
+    node = SimAttachNode()
+    node._pose_wait_timeout = 0.1
+    try:
+        req = AttachAgent.Request(child_id='cf_9', parent_id='ghost', attach=True)
+        resp = node._on_request(req, AttachAgent.Response())
+        assert not resp.success and 'ghost' in resp.message
+    finally:
+        node.destroy_node()

@@ -1,0 +1,32 @@
+# test_9: ported from agilex_sitl hero_sitl/config/test_9.yaml.
+# All keys, and the sim: block defaults, are documented in example.yaml.
+
+ground_robots:
+  # - name: ranger_1
+  #   pose: {x: 0.0, y: 0.0, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_1
+  #   pose: {x: 0.0, y: 0.8, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_2
+  #   pose: {x: 0.0, y: -0.8, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_3
+  #   pose: {x: 0.0127, y: -1.25144, yaw: 0.0}
+  #   drive: omni
+
+crazyflies:
+  - pose: {x: -0.5, y: -0.25, z: 0.03}    # cf_1
+  - pose: {x: -0.5, y: 0.0, z: 0.03}      # cf_2
+  - pose: {x: -0.5, y: 0.25, z: 0.03}     # cf_3
+  - pose: {x: -0.25, y: -0.25, z: 0.03}   # cf_4
+  - pose: {x: -0.25, y: 0.0, z: 0.03}     # cf_5
+  - pose: {x: -0.25, y: 0.25, z: 0.03}    # cf_6
+  - pose: {x: 0.0, y: -0.25, z: 0.03}     # cf_7
+  - pose: {x: 0.0, y: 0.25, z: 0.03}      # cf_8
+  - pose: {x: 0.25, y: -0.25, z: 0.03}    # cf_9
+  - pose: {x: 0.25, y: 0.0, z: 0.03}      # cf_10
+  - pose: {x: 0.25, y: 0.25, z: 0.03}     # cf_11
+  - pose: {x: 0.5, y: -0.25, z: 0.03}     # cf_12
+  - pose: {x: 0.5, y: 0.0, z: 0.03}       # cf_13
+  - pose: {x: 0.5, y: 0.25, z: 0.03}      # cf_14

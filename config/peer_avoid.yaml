@@ -1,0 +1,21 @@
+# peer_avoid: ported from agilex_sitl hero_sitl/config/peer_avoid.yaml.
+# All keys, and the sim: block defaults, are documented in example.yaml.
+
+ground_robots:
+  - name: ranger_1
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}
+    drive: omni
+  - name: herover_1
+    pose: {x: -1.2739, y: -0.0171, yaw: 0.0}
+    drive: omni
+  - name: herover_2
+    pose: {x: -0.8799, y: -0.8897, yaw: 0.0}
+    drive: omni
+  - name: herover_3
+    pose: {x: 0.0035, y: -1.249, yaw: 0.0}
+    drive: omni
+
+crazyflies:
+  - pose: {x: 1.25, y: 0.0, z: 0.03}    # cf_1
+  - pose: {x: 0.75, y: 1.04, z: 0.03}   # cf_2
+  - pose: {x: 0.0, y: 1.25, z: 0.03}    # cf_3

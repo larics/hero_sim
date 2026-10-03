@@ -1,0 +1,32 @@
+# hero_sim scenario: every supported key, with defaults.
+# Copy this file to make a new scenario. Unknown keys are rejected at launch.
+
+# Kinematic ground robots. Each one subscribes to /<name>/cmd_vel (body-frame
+# Twist, held until the next message) and publishes /<name>/pose plus TF
+# world -> <name> at z = 0.
+#   drive: omni  holonomic, honors linear.x, linear.y and angular.z (default)
+#   drive: diff  non-holonomic, linear.y is ignored
+ground_robots:
+  - name: ranger_1
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}   # m, m, rad
+    drive: omni
+  - name: herover_1
+    pose: {x: 0.0, y: 0.6, yaw: 0.0}
+    drive: diff
+
+# Crazyflies, named cf_1, cf_2, ... in list order (reordering renumbers them).
+# Same topics/services as crazyswarm2's crazyflie_server, plus /all/* broadcasts.
+crazyflies:
+  - pose: {x: 1.5, y:  0.5, z: 0.03}   # cf_1
+  - pose: {x: 1.5, y: -0.5, z: 0.03}   # cf_2
+
+# Optional. Leave out any key to keep its default.
+sim:
+  ground_rate: 50.0          # Hz, ground robot integration + /pose rate
+  ground_max_speed: 2.0      # m/s, clamp on |(linear.x, linear.y)|
+  ground_max_yaw_rate: 2.0   # rad/s, clamp on |angular.z|
+  cf_rate: 10.0              # Hz, Crazyflie update + /pose rate
+  cf_battery_drain: 0.025    # V/s while flying (starts 4.2 V, floors at 3.0 V)
+  attach: true               # sim_attach: /sim/attach_agent dock ride-along
+  rviz: true                 # RViz with config/sim.rviz
+  map: icuas26_1             # octomap: maps/<name>.bt, a path to a .bt, or null for none

@@ -1,0 +1,28 @@
+# dock_redeploy3: ported from agilex_sitl hero_sitl/config/dock_redeploy3.yaml.
+# All keys, and the sim: block defaults, are documented in example.yaml.
+
+ground_robots:
+  - name: ranger_1
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}
+    drive: omni
+  # - name: herover_1
+  #   pose: {x: 2.0, y: -3.0, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_2
+  #   pose: {x: -1.0, y: 0.0, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_3
+  #   pose: {x: -0.12, y: -2.12, yaw: 0.0}
+  #   drive: omni
+  # - name: herover_2
+  #   pose: {x: 2.0, y: 1.5, yaw: 0.0}
+  #   drive: omni
+
+crazyflies:
+  - pose: {x: 0.5, y: 1.0, z: 0.03}    # cf_1
+  - pose: {x: 0.5, y: 0.0, z: 0.03}    # cf_2
+  - pose: {x: 0.5, y: -1.0, z: 0.03}   # cf_3
+  - pose: {x: 3.0, y: 1.0, z: 0.03}    # cf_4
+  # - pose: {x: 3.0, y: 0.0, z: 0.03}
+  # - pose: {x: 3.0, y: -1.0, z: 0.03}
+  # - pose: {x: -1.0, y: -0.5, z: 0.03}

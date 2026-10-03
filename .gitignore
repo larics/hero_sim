@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# colcon output if built in-tree
+/build/
+/install/
+/log/
+
+# personal Claude Code settings
+.claude/settings.local.json

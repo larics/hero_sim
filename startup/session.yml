@@ -1,0 +1,11 @@
+# tmuxinator layout for hero_sim. Run via start.sh, which passes config=<abs path>.
+name: hero_sim
+root: ./
+startup_window: sim
+pre_window: source ./_setup.sh "<%= @settings["config"] %>"
+windows:
+  - sim:
+      layout: even-vertical
+      panes:
+        - ros2 launch hero_sim sim.launch.py
+        - ros2 launch hero_sim octomap.launch.py
