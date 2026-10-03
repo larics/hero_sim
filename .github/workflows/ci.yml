@@ -1,0 +1,59 @@
+# Runs on GitHub's servers on every push and pull request: builds hero_sim in
+# a clean ROS 2 Humble container, runs the tests and a launch smoke test.
+# Results: the Actions tab on GitHub, and a check mark / cross next to each commit.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:  # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    container: ros:humble
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out hero_sim
+        uses: actions/checkout@v4
+        with:
+          path: ws/src/hero_sim
+
+      # Same crazyswarm2 commit as the icuas26_finals docker image.
+      # hero_mrs_msgs (private hero_mrs_control_stack) isn't fetched, so this
+      # also checks that hero_sim works without it; the attach tests skip.
+      - name: Fetch crazyflie_interfaces
+        run: |
+          git clone --quiet --filter=blob:none https://github.com/IMRCLab/crazyswarm2 /tmp/crazyswarm2
+          git -C /tmp/crazyswarm2 checkout --quiet fcf51e27fe675bbdb564a40f4ca1ee4336c062ea
+          cp -r /tmp/crazyswarm2/crazyflie_interfaces ws/src/
+
+      - name: Install test tools
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends python3-pytest python3-numpy > /dev/null
+
+      - name: Build
+        working-directory: ws
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --packages-select crazyflie_interfaces hero_sim
+
+      - name: Unit tests
+        working-directory: ws
+        run: |
+          source install/setup.bash
+          python3 -m pytest -v -rs src/hero_sim/test
+
+      - name: Launch smoke test
+        working-directory: ws
+        run: |
+          source install/setup.bash
+          printf 'ground_robots: [{name: r1}]\ncrazyflies: [{pose: {}}]\nsim: {rviz: false}\n' > /tmp/ci.yaml
+          timeout 10 ros2 launch hero_sim sim.launch.py config:=/tmp/ci.yaml > launch.log 2>&1 || true
+          cat launch.log
+          grep -q 'crazyflies at' launch.log || { echo "crazyflie_server did not start"; exit 1; }
+          grep -q 'ground robots at' launch.log || { echo "ground_robot_sim did not start"; exit 1; }
+          if grep -E 'Traceback|process has died' launch.log; then exit 1; fi

@@ -1,5 +1,7 @@
 # hero_sim
 
+[![CI](https://github.com/KhAlamdar11/hero_sim/actions/workflows/ci.yml/badge.svg)](https://github.com/KhAlamdar11/hero_sim/actions/workflows/ci.yml)
+
 Lightweight HERO simulation without Gazebo. Crazyflies and ground robots are simulated kinematically (velocities are integrated straight into poses), with the same ROS topics and services the control stack uses.
 
 ## Setup
@@ -78,3 +80,5 @@ Ground robots hold the last `cmd_vel` until a new one arrives. Poses are publish
 cd ~/ros2_ws/src/hero_sim
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python3 -m pytest test
 ```
+
+GitHub also runs the tests on every push (`.github/workflows/ci.yml`). Results are in the repo's **Actions** tab and as a ✓/✗ next to each commit.
