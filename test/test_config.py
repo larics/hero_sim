@@ -53,10 +53,30 @@ def test_drive_is_case_insensitive():
     ('sim: {cf_hz: 5}', "sim: unknown key.*'cf_hz'"),
     ('sim: {ground_rate: 0}', 'ground_rate must be > 0'),
     ('sim: {cf_battery_drain: -1}', 'cf_battery_drain must be >= 0'),
+    ('sim: {attach: maybe}', 'attach must be auto, true or false'),
 ])
 def test_rejects_bad_config(text, match):
     with pytest.raises(ValueError, match=match):
         parse(text)
+
+
+@pytest.mark.parametrize('attach, installed, expected', [
+    ('auto', True, True),
+    ('auto', False, False),
+    (True, True, True),
+    (False, True, False),
+    (False, False, False),
+])
+def test_attach_enabled(monkeypatch, attach, installed, expected):
+    monkeypatch.setattr('importlib.util.find_spec',
+                        lambda name: object() if installed else None)
+    assert config.attach_enabled({'attach': attach}) is expected
+
+
+def test_attach_true_without_msgs_fails_loudly(monkeypatch):
+    monkeypatch.setattr('importlib.util.find_spec', lambda name: None)
+    with pytest.raises(RuntimeError, match='hero_mrs_msgs is not installed'):
+        config.attach_enabled({'attach': True})
 
 
 def test_load_names_the_file(tmp_path):

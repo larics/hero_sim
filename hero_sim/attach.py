@@ -8,6 +8,9 @@ timer drives the child to (parent pose (+) that offset) at follow_rate Hz by
 publishing /<child>/cmd_position, which SimCrazyflie applies as an
 instantaneous setpoint. Detach stops driving it. Several couples can run at
 once, keyed by child_id.
+
+hero_mrs_msgs (from hero_mrs_control_stack) is an optional dependency of
+hero_sim; sim.launch.py only starts this node when it is installed.
 """
 import math
 import threading

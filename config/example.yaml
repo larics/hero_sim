@@ -27,6 +27,7 @@ sim:
   ground_max_yaw_rate: 2.0   # rad/s, clamp on |angular.z|
   cf_rate: 10.0              # Hz, Crazyflie update + /pose rate
   cf_battery_drain: 0.025    # V/s while flying (starts 4.2 V, floors at 3.0 V)
-  attach: true               # sim_attach: /sim/attach_agent dock ride-along
+  attach: auto               # sim_attach (/sim/attach_agent dock ride-along): auto runs it
+                             # only if hero_mrs_msgs is installed; true | false to force
   rviz: true                 # RViz with config/sim.rviz
   map: icuas26_1             # octomap: maps/<name>.bt, a path to a .bt, or null for none

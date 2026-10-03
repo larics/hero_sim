@@ -20,7 +20,7 @@ SIM_DEFAULTS = {
     'ground_max_yaw_rate': 2.0,  # rad/s, clamp on |angular.z|
     'cf_rate': 10.0,             # Hz, Crazyflie update + /pose rate
     'cf_battery_drain': 0.025,   # V/s while flying (starts at 4.2 V, floor 3.0 V)
-    'attach': True,              # run sim_attach (/sim/attach_agent dock ride-along)
+    'attach': 'auto',            # sim_attach dock ride-along: auto | true | false (see attach_enabled)
     'rviz': True,                # open RViz with config/sim.rviz
     'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
 }
@@ -90,8 +90,29 @@ def parse(raw):
     sim['cf_battery_drain'] = float(sim['cf_battery_drain'])
     if sim['cf_battery_drain'] < 0.0:
         raise ValueError(f'sim.cf_battery_drain must be >= 0, got {sim["cf_battery_drain"]}')
+    if not (isinstance(sim['attach'], bool) or sim['attach'] == 'auto'):
+        raise ValueError(f'sim.attach must be auto, true or false, got {sim["attach"]!r}')
 
     return Scenario(ground, cfs, sim)
+
+
+def attach_enabled(sim):
+    """Whether to run sim_attach for this scenario's sim block.
+
+    sim_attach implements hero_mrs_msgs/srv/AttachAgent, which only
+    hero_mrs_control_stack calls, so hero_mrs_msgs is an optional dependency:
+    'auto' runs it only when that package is installed, true requires it,
+    false never runs it.
+    """
+    from importlib.util import find_spec
+    available = find_spec('hero_mrs_msgs') is not None
+    if sim['attach'] == 'auto':
+        return available
+    if sim['attach'] and not available:
+        raise RuntimeError(
+            'sim.attach is true but hero_mrs_msgs is not installed; build it from '
+            'hero_mrs_control_stack, or set sim.attach to auto or false')
+    return sim['attach']
 
 
 def _list(raw, key):
