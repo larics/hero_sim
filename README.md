@@ -26,7 +26,7 @@ Runs inside the `icuas26_finals` docker container.
 
 Requires `crazyflie_interfaces` (crazyswarm2) in the same workspace.
 
-Optional: if `hero_mrs_msgs` (from hero_mrs_control_stack) is also in the workspace, the dock ride-along node (`/sim/attach_agent`) starts automatically. Without it, that node is skipped and everything else runs normally.
+Optional: if `hero_mrs_msgs` (from hero_mrs_control_stack) is also in the workspace, the dock ride-along node (`/sim/attach_agent`) starts automatically. Without it, that node is skipped and everything else runs normally. Called with an empty `parent_id`, the same service locks a UAV in place instead (used for a UAV hanging from a branch perch, since the sim has no gripper).
 
 ## Usage
 

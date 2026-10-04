@@ -191,6 +191,35 @@ def test_attach_follows_parent_in_body_frame(rclpy_context):
         node.destroy_node()
 
 
+def test_attach_without_parent_locks_in_place(rclpy_context):
+    pytest.importorskip('hero_mrs_msgs')
+    from hero_mrs_msgs.srv import AttachAgent
+    from hero_sim.attach import SimAttachNode
+
+    node = SimAttachNode()
+    try:
+        node._poses['cf_1'] = _pose(1.0, 2.0, 0.65, -math.pi / 2)  # hanging on a branch
+        req = AttachAgent.Request(child_id='cf_1', parent_id='', attach=True)
+        resp = node._on_request(req, AttachAgent.Response())
+        assert resp.success, resp.message
+
+        couple = node._couples['cf_1']
+        real_publisher, capture = couple.publisher, _Capture()
+        couple.publisher = capture
+        node._poses['cf_1'] = _pose(1.0, 2.0, 0.0, 0.0)  # disarmed: whatever it reports
+        node._follow_tick()
+        couple.publisher = real_publisher
+        msg = capture.msgs[-1]
+        assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((1.0, 2.0, 0.65, -math.pi / 2))
+
+        req.attach = False
+        resp = node._on_request(req, AttachAgent.Response())
+        assert resp.success and 'lock' in resp.message
+        assert 'cf_1' not in node._couples
+    finally:
+        node.destroy_node()
+
+
 def test_attach_fails_without_pose(rclpy_context):
     pytest.importorskip('hero_mrs_msgs')
     from hero_mrs_msgs.srv import AttachAgent

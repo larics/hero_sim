@@ -1,4 +1,4 @@
-"""Sim backend for the coordinator's AttachAgent hook (dock ride-along).
+"""Sim backend for the AttachAgent hook (dock ride-along, branch hang).
 
 Serves /sim/attach_agent (hero_mrs_msgs/srv/AttachAgent). When a UAV docks on
 a ground robot the coordinator calls attach=true; on undock, attach=false.
@@ -8,6 +8,11 @@ timer drives the child to (parent pose (+) that offset) at follow_rate Hz by
 publishing /<child>/cmd_position, which SimCrazyflie applies as an
 instantaneous setpoint. Detach stops driving it. Several couples can run at
 once, keyed by child_id.
+
+An empty parent_id locks the child where it is: its current world pose is
+frozen and held until detach. hero_mrs_control_stack's gripper_perch_node uses
+this for a UAV hanging from a branch perch — the sim has no gripper, so
+without the lock a disarmed UAV would not stay on the branch.
 
 hero_mrs_msgs (from hero_mrs_control_stack) is an optional dependency of
 hero_sim; sim.launch.py only starts this node when it is installed.
@@ -34,7 +39,10 @@ def _planar(pose_msg):
 
 
 class _Couple:
-    """Frozen child pose in the parent's body frame, plus the child's setpoint publisher."""
+    """Frozen child pose in the parent's body frame, plus the child's setpoint publisher.
+
+    ``parent_id`` None is a lock in place: the frozen pose is in the world frame.
+    """
 
     __slots__ = ('parent_id', 'local_x', 'local_y', 'dz', 'dyaw', 'publisher')
 
@@ -109,6 +117,8 @@ class SimAttachNode(Node):
         return self._do_detach(request.child_id, response)
 
     def _do_attach(self, child, parent, response):
+        if not parent:
+            return self._do_lock(child, response)
         with self._lock:
             already = self._couples.get(child)
         if already is not None:
@@ -147,6 +157,27 @@ class SimAttachNode(Node):
         response.message = f'attached {child} to {parent}'
         return response
 
+    def _do_lock(self, child, response):
+        """Freeze ``child`` at its current world pose (attach with no parent)."""
+        child_pose = self._wait_for_pose(child)
+        if child_pose is None:
+            response.success = False
+            response.message = f"no pose for '{child}' on /{child}/pose"
+            return response
+        cx, cy, cz, cyaw = _planar(child_pose)
+        publisher = self.create_publisher(Position, f'/{child}/cmd_position', self._qos)
+        with self._lock:
+            old = self._couples.get(child)
+            # parent_id None: the "offset" is the world pose itself.
+            self._couples[child] = _Couple(None, cx, cy, cz, cyaw, publisher)
+            if old is not None:
+                self.destroy_publisher(old.publisher)
+        self.get_logger().info(
+            f'LOCK {child} at ({cx:.3f}, {cy:.3f}, {cz:.3f}) yaw={cyaw:.3f}')
+        response.success = True
+        response.message = f'locked {child} in place'
+        return response
+
     def _do_detach(self, child, response):
         with self._lock:
             couple = self._couples.pop(child, None)
@@ -156,9 +187,10 @@ class SimAttachNode(Node):
             response.success = True  # idempotent
             response.message = f'{child} was not attached (no-op)'
             return response
-        self.get_logger().info(f'DETACH {child} <- {couple.parent_id}')
+        where = couple.parent_id or 'its lock'
+        self.get_logger().info(f'DETACH {child} <- {where}')
         response.success = True
-        response.message = f'detached {child} from {couple.parent_id}'
+        response.message = f'detached {child} from {where}'
         return response
 
     # -------------------------------------------------------------- follow loop
@@ -168,10 +200,13 @@ class SimAttachNode(Node):
         # Publish under the lock so attach/detach can't destroy a publisher mid-use.
         with self._lock:
             for couple in self._couples.values():
-                parent_pose = self._poses.get(couple.parent_id)
-                if parent_pose is None:
-                    continue
-                px, py, pz, pyaw = _planar(parent_pose)
+                if couple.parent_id is None:
+                    px = py = pz = pyaw = 0.0   # locked: offset is the world pose
+                else:
+                    parent_pose = self._poses.get(couple.parent_id)
+                    if parent_pose is None:
+                        continue
+                    px, py, pz, pyaw = _planar(parent_pose)
                 c, s = math.cos(pyaw), math.sin(pyaw)
 
                 msg = Position()
