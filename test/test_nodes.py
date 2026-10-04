@@ -217,6 +217,16 @@ def test_grippers_lifecycle(rclpy_context, node):
     assert resp.success and 'no-op' in resp.message and len(capture.msgs) == published
 
 
+def test_grippers_not_drawn_without_models(rclpy_context, node):
+    from hero_sim import config
+    from hero_sim.gripper import TOPIC, Grippers
+
+    grippers = Grippers(node, (config.Crazyflie('cf_1', 0, 0, 0, gripper=True),), draw=False)
+    assert node.count_publishers(TOPIC) == 0
+    assert grippers.close('cf_1') and grippers.release('cf_1', 0.0, 0.0, 0.5, 0.0)
+    assert grippers.state('cf_1') is None and len(grippers.left) == 1  # state still kept
+
+
 def test_attach_follows_parent_in_body_frame(make):
     pytest.importorskip('hero_mrs_msgs')
     from hero_mrs_msgs.srv import AttachAgent

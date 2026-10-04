@@ -7,6 +7,9 @@ that lock leaves the gripper on the branch, where the UAV hung, while the UAV
 flies off without one. /sim/<cf>/add_gripper (std_srvs/Trigger) fits a fresh,
 open gripper on a Crazyflie that has none.
 
+Grippers count as robot models: they are drawn only when the robot meshes
+are (sim.rviz and sim.models); otherwise only their state is kept.
+
 Each gripper is one TRIANGLE_LIST marker on /hero_sim/grippers (transient
 local, so a restarted RViz still gets them). A fitted gripper is frame-locked
 to its Crazyflie's TF frame, so RViz moves it by itself; one left on a branch
@@ -118,16 +121,18 @@ class Grippers:
     """Every Crazyflie's gripper (open, closed or none), the ones left on branches,
     their RViz markers and the /sim/<cf>/add_gripper services."""
 
-    def __init__(self, node, crazyflies):
+    def __init__(self, node, crazyflies, draw=True):
         self._node = node
         self._names = [cf.name for cf in crazyflies]
         self._fitted = {cf.name: OPEN if cf.gripper else None for cf in crazyflies}
         self._left = []  # world (x, y, z, yaw) of grippers left on branches
         self._lock = threading.Lock()
 
-        qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
-                         durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self._pub = node.create_publisher(MarkerArray, TOPIC, qos)
+        self._pub = None  # draw=False: track state, publish nothing
+        if draw:
+            qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            self._pub = node.create_publisher(MarkerArray, TOPIC, qos)
         for name in self._names:
             node.create_service(Trigger, f'/sim/{name}/add_gripper', partial(self._on_add, name))
         with self._lock:
@@ -175,6 +180,8 @@ class Grippers:
 
     def _publish(self):
         """Republish every gripper; call with _lock held."""
+        if self._pub is None:
+            return
         markers = [Marker(action=Marker.DELETEALL)]
         for i, name in enumerate(self._names):
             if self._fitted[name] is not None:

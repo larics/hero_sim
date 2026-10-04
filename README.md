@@ -98,7 +98,7 @@ Locking the UAV in place (`/sim/attach_agent` with an empty `parent_id`, as when
 ros2 service call /sim/cf_1/add_gripper std_srvs/srv/Trigger
 ```
 
-The attach node runs the grippers, so they also need `hero_mrs_msgs`.
+The attach node runs the grippers, so they also need `hero_mrs_msgs`. Like the robot models, they are hidden with `sim: {models: false}`.
 
 ## Driving the robots
 

@@ -90,7 +90,9 @@ class SimAttachNode(Node):
                           self._follow_tick, callback_group=self._cbg)
 
         scenario = config.load(config.resolve_config(self.get_parameter('config_path').value))
-        self._grippers = Grippers(self, scenario.crazyflies)
+        # Drawn only alongside the robot meshes (robot_models' launch condition).
+        self._grippers = Grippers(self, scenario.crazyflies,
+                                  draw=scenario.sim['rviz'] and scenario.sim['models'])
 
         fitted = [cf.name for cf in scenario.crazyflies if cf.gripper]
         self.get_logger().info(
