@@ -31,10 +31,10 @@ def _actions(context):
     ]
     if config.attach_enabled(sim):
         actions.append(Node(package='hero_sim', executable='sim_attach', name='sim_attach_node',
-                            output='screen'))
+                            output='screen', parameters=params))
     elif sim['attach'] == 'auto':
         actions.append(LogInfo(msg='[hero_sim] hero_mrs_msgs not installed: '
-                                   'sim_attach (dock ride-along) skipped'))
+                                   'sim_attach (dock ride-along, grippers) skipped'))
     if sim['rviz']:
         rviz_config = str(config.share_dir() / 'config' / 'sim.rviz')
         actions.append(Node(package='rviz2', executable='rviz2', name='rviz2', output='screen',

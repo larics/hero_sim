@@ -19,8 +19,12 @@ ground_robots:
 
 # Crazyflies, named cf_1, cf_2, ... in list order (reordering renumbers them).
 # Same topics/services as crazyswarm2's crazyflie_server, plus /all/* broadcasts.
+#   gripper: true   starts with an open two-claw gripper on top, drawn in RViz
+#                   (default false). Needs sim_attach (see attach below), which
+#                   shuts it on a branch lock and serves /sim/<cf>/add_gripper.
 crazyflies:
   - pose: {x: 1.5, y:  0.5, z: 0.03}   # cf_1
+    gripper: true
   - pose: {x: 1.5, y: -0.5, z: 0.03}   # cf_2
 
 # Optional. Leave out any key to keep its default.

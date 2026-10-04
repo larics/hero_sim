@@ -8,6 +8,7 @@ pytest.importorskip('crazyflie_interfaces')
 
 from conftest import duration  # noqa: E402
 from crazyflie_interfaces.srv import Arm, Takeoff  # noqa: E402
+from std_srvs.srv import Trigger  # noqa: E402
 from geometry_msgs.msg import PoseStamped, Twist  # noqa: E402
 
 from hero_sim.kinematics import yaw_to_quat  # noqa: E402
@@ -22,6 +23,7 @@ ground_robots:
     drive: diff
 crazyflies:
   - pose: {x: 0.5, y: 0.5, z: 0.03}
+    gripper: true
   - pose: {x: -0.5, y: 0.5, z: 0.03}
 sim: {ground_rate: 10.0, cf_rate: 20.0, cf_battery_drain: 0.1}
 """
@@ -161,75 +163,124 @@ def _pose(x, y, z, yaw):
     return msg
 
 
-def test_attach_follows_parent_in_body_frame(rclpy_context):
+def test_gripper_box_faces_point_out():
+    from hero_sim.gripper import box
+    center = (0.1, -0.2, 0.3)
+    tris = box(center, (0.0, 0.6, 0.8), (0.0, -0.8, 0.6), (0.5, 0.0, 0.0))  # rotated
+    assert len(tris) == 36
+    for a, b, c in zip(tris[0::3], tris[1::3], tris[2::3]):
+        u = [b[i] - a[i] for i in range(3)]
+        v = [c[i] - a[i] for i in range(3)]
+        normal = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+        out = [(a[i] + b[i] + c[i]) / 3 - center[i] for i in range(3)]
+        assert sum(n * o for n, o in zip(normal, out)) > 0
+
+
+def test_gripper_claws_shut_around_the_bar():
+    from hero_sim.gripper import BAR_Z, _claw, OPEN_ANGLE
+    shut, opened = _claw(0.0), _claw(OPEN_ANGLE)
+    assert shut[0] == opened[0]  # same pivot
+    tip_y, tip_z = shut[-1]
+    assert 0.0 < tip_y < 0.005 and tip_z > BAR_Z + 0.015  # curled over a 3 cm bar
+    assert opened[-1][0] > 0.03  # open: tips 6 cm+ apart, the bar fits between
+
+
+def test_grippers_lifecycle(rclpy_context, node):
+    from visualization_msgs.msg import Marker
+    from hero_sim import config
+    from hero_sim.gripper import CLOSED, OPEN, Grippers
+
+    cfs = (config.Crazyflie('cf_1', 0, 0, 0, gripper=True), config.Crazyflie('cf_2', 0, 0, 0))
+    grippers = Grippers(node, cfs)
+    grippers._pub = capture = _Capture()
+    assert (grippers.state('cf_1'), grippers.state('cf_2')) == (OPEN, None)
+
+    assert not grippers.close('cf_2') and not grippers.close('scout_1')  # nothing to shut
+    assert grippers.close('cf_1') and grippers.state('cf_1') == CLOSED
+    markers = capture.msgs[-1].markers
+    assert markers[0].action == Marker.DELETEALL
+    assert [(m.header.frame_id, m.ns, m.frame_locked) for m in markers[1:]] == [
+        ('cf_1', 'gripper', True)]
+
+    assert grippers.release('cf_1', 1.0, 2.0, 0.65, math.pi / 2)
+    assert grippers.state('cf_1') is None and grippers.left == [(1.0, 2.0, 0.65, math.pi / 2)]
+    left = capture.msgs[-1].markers[1]
+    assert (left.header.frame_id, left.ns, left.frame_locked) == ('world', 'gripper_left', False)
+    assert left.pose.position.z == 0.65 and left.pose.orientation.z == pytest.approx(math.sqrt(0.5))
+    assert not grippers.release('cf_1', 0.0, 0.0, 0.0, 0.0)  # already gone
+
+    resp = grippers._on_add('cf_1', Trigger.Request(), Trigger.Response())
+    assert resp.success and grippers.state('cf_1') == OPEN
+    assert len(capture.msgs[-1].markers) == 3  # DELETEALL, cf_1's new one, the one left behind
+    published = len(capture.msgs)
+    resp = grippers._on_add('cf_1', Trigger.Request(), Trigger.Response())
+    assert resp.success and 'no-op' in resp.message and len(capture.msgs) == published
+
+
+def test_attach_follows_parent_in_body_frame(make):
     pytest.importorskip('hero_mrs_msgs')
     from hero_mrs_msgs.srv import AttachAgent
     from hero_sim.attach import SimAttachNode
 
-    node = SimAttachNode()
-    try:
-        node._poses['herover_1'] = _pose(1.0, 0.0, 0.0, math.pi / 2)
-        node._poses['cf_1'] = _pose(1.0, 1.0, 0.2, math.pi / 2)  # 1 m ahead of the parent
-        req = AttachAgent.Request(child_id='cf_1', parent_id='herover_1', attach=True)
-        resp = node._on_request(req, AttachAgent.Response())
-        assert resp.success, resp.message
+    node = make(SimAttachNode)
+    node._poses['herover_1'] = _pose(1.0, 0.0, 0.0, math.pi / 2)
+    node._poses['cf_1'] = _pose(1.0, 1.0, 0.2, math.pi / 2)  # 1 m ahead of the parent
+    req = AttachAgent.Request(child_id='cf_1', parent_id='herover_1', attach=True)
+    resp = node._on_request(req, AttachAgent.Response())
+    assert resp.success, resp.message
 
-        couple = node._couples['cf_1']
-        real_publisher, capture = couple.publisher, _Capture()
-        couple.publisher = capture
-        node._poses['herover_1'] = _pose(2.0, 0.0, 0.0, 0.0)  # parent turned to face +x
-        node._follow_tick()
-        couple.publisher = real_publisher  # detach must destroy a real publisher
-        msg = capture.msgs[-1]
-        assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((3.0, 0.0, 0.2, 0.0))
+    couple = node._couples['cf_1']
+    real_publisher, capture = couple.publisher, _Capture()
+    couple.publisher = capture
+    node._poses['herover_1'] = _pose(2.0, 0.0, 0.0, 0.0)  # parent turned to face +x
+    node._follow_tick()
+    couple.publisher = real_publisher  # detach must destroy a real publisher
+    msg = capture.msgs[-1]
+    assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((3.0, 0.0, 0.2, 0.0))
 
-        req.attach = False
-        assert node._on_request(req, AttachAgent.Response()).success
-        assert 'cf_1' not in node._couples
-        assert node._on_request(req, AttachAgent.Response()).success  # idempotent
-    finally:
-        node.destroy_node()
+    req.attach = False
+    assert node._on_request(req, AttachAgent.Response()).success
+    assert 'cf_1' not in node._couples
+    assert node._on_request(req, AttachAgent.Response()).success  # idempotent
+    assert node._grippers.state('cf_1') == 'open'  # docking leaves the gripper alone
 
 
-def test_attach_without_parent_locks_in_place(rclpy_context):
+def test_attach_without_parent_locks_in_place(make):
     pytest.importorskip('hero_mrs_msgs')
     from hero_mrs_msgs.srv import AttachAgent
     from hero_sim.attach import SimAttachNode
 
-    node = SimAttachNode()
-    try:
-        node._poses['cf_1'] = _pose(1.0, 2.0, 0.65, -math.pi / 2)  # hanging on a branch
-        req = AttachAgent.Request(child_id='cf_1', parent_id='', attach=True)
-        resp = node._on_request(req, AttachAgent.Response())
-        assert resp.success, resp.message
+    node = make(SimAttachNode)
+    node._poses['cf_1'] = _pose(1.0, 2.0, 0.65, -math.pi / 2)  # hanging on a branch
+    req = AttachAgent.Request(child_id='cf_1', parent_id='', attach=True)
+    resp = node._on_request(req, AttachAgent.Response())
+    assert resp.success, resp.message
+    assert node._grippers.state('cf_1') == 'closed'
 
-        couple = node._couples['cf_1']
-        real_publisher, capture = couple.publisher, _Capture()
-        couple.publisher = capture
-        node._poses['cf_1'] = _pose(1.0, 2.0, 0.0, 0.0)  # disarmed: whatever it reports
-        node._follow_tick()
-        couple.publisher = real_publisher
-        msg = capture.msgs[-1]
-        assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((1.0, 2.0, 0.65, -math.pi / 2))
+    couple = node._couples['cf_1']
+    real_publisher, capture = couple.publisher, _Capture()
+    couple.publisher = capture
+    node._poses['cf_1'] = _pose(1.0, 2.0, 0.0, 0.0)  # disarmed: whatever it reports
+    node._follow_tick()
+    couple.publisher = real_publisher
+    msg = capture.msgs[-1]
+    assert (msg.x, msg.y, msg.z, msg.yaw) == pytest.approx((1.0, 2.0, 0.65, -math.pi / 2))
 
-        req.attach = False
-        resp = node._on_request(req, AttachAgent.Response())
-        assert resp.success and 'lock' in resp.message
-        assert 'cf_1' not in node._couples
-    finally:
-        node.destroy_node()
+    req.attach = False
+    resp = node._on_request(req, AttachAgent.Response())
+    assert resp.success and 'lock' in resp.message and 'gripper left' in resp.message
+    assert 'cf_1' not in node._couples
+    assert node._grippers.state('cf_1') is None
+    assert node._grippers.left == [pytest.approx((1.0, 2.0, 0.65, -math.pi / 2))]
 
 
-def test_attach_fails_without_pose(rclpy_context):
+def test_attach_fails_without_pose(make):
     pytest.importorskip('hero_mrs_msgs')
     from hero_mrs_msgs.srv import AttachAgent
     from hero_sim.attach import SimAttachNode
 
-    node = SimAttachNode()
+    node = make(SimAttachNode)
     node._pose_wait_timeout = 0.1
-    try:
-        req = AttachAgent.Request(child_id='cf_9', parent_id='ghost', attach=True)
-        resp = node._on_request(req, AttachAgent.Response())
-        assert not resp.success and 'ghost' in resp.message
-    finally:
-        node.destroy_node()
+    req = AttachAgent.Request(child_id='cf_9', parent_id='ghost', attach=True)
+    resp = node._on_request(req, AttachAgent.Response())
+    assert not resp.success and 'ghost' in resp.message

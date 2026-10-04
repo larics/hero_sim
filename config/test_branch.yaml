@@ -20,10 +20,10 @@ ground_robots:
   #   model: herover
 
 crazyflies:
-  - pose: {x: -0.113226, y: 0.090581, z: 0.23}    # cf_1
-  - pose: {x: -0.113226, y: -0.090581, z: 0.23}   # cf_2
-  - pose: {x: 0.113226, y: -0.090581, z: 0.23}    # cf_3
-  - pose: {x: 0.113226, y: 0.090581, z: 0.23}     # cf_4
+  - {pose: {x: -0.113226, y: 0.090581, z: 0.23}, gripper: true}    # cf_1
+  - {pose: {x: -0.113226, y: -0.090581, z: 0.23}, gripper: true}   # cf_2
+  - {pose: {x: 0.113226, y: -0.090581, z: 0.23}, gripper: true}    # cf_3
+  - {pose: {x: 0.113226, y: 0.090581, z: 0.23}, gripper: true}     # cf_4
   
 sim:
   models: true 

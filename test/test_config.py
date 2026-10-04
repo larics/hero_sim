@@ -45,6 +45,11 @@ def test_model_meshes_exist():
         assert (CONFIG_DIR.parent / 'models' / rel).is_file(), rel
 
 
+def test_crazyflie_gripper_is_optional():
+    s = parse('crazyflies: [{pose: {}, gripper: true}, {pose: {}}]')
+    assert [cf.gripper for cf in s.crazyflies] == [True, False]
+
+
 def test_drive_is_case_insensitive():
     s = parse('ground_robots: [{name: h, drive: DIFF}]')
     assert s.ground_robots[0].drive == 'diff'
@@ -61,6 +66,7 @@ def test_drive_is_case_insensitive():
     ('ground_robots: [{name: cf_1}]\ncrazyflies: [{pose: {}}]', 'clash with crazyflie names'),
     ('crazyflies: [{pose: {yaw: 1}}]', r"crazyflies\[0\] \(cf_1\)\.pose: unknown key"),
     ('crazyflies: {pose: {}}', 'crazyflies must be a list'),
+    ('crazyflies: [{gripper: yes please}]', 'gripper must be true or false'),
     ('sim: {cf_hz: 5}', "sim: unknown key.*'cf_hz'"),
     ('sim: {ground_rate: 0}', 'ground_rate must be > 0'),
     ('sim: {cf_battery_drain: -1}', 'cf_battery_drain must be >= 0'),

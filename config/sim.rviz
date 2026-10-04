@@ -116,6 +116,18 @@ Visualization Manager:
         Value: /hero_sim/robot_models
       Value: true
     - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Grippers
+      Namespaces:
+        {}
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /hero_sim/grippers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: MarkerArray
       Namespaces:

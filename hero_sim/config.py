@@ -55,6 +55,7 @@ class Crazyflie:
     x: float
     y: float
     z: float
+    gripper: bool = False  # starts with an open gripper on top (see hero_sim/gripper.py)
 
 
 @dataclass(frozen=True)
@@ -166,9 +167,12 @@ def _ground_robot(i, entry):
 def _crazyflie(i, entry):
     name = f'cf_{i + 1}'
     where = f'crazyflies[{i}] ({name})'
-    _check_keys(entry, ('pose',), where)
+    _check_keys(entry, ('pose', 'gripper'), where)
+    gripper = entry.get('gripper', False)
+    if not isinstance(gripper, bool):
+        raise ValueError(f'{where}: gripper must be true or false, got {gripper!r}')
     x, y, z = _pose(entry, where, ('x', 'y', 'z'))
-    return Crazyflie(name, x, y, z)
+    return Crazyflie(name, x, y, z, gripper)
 
 
 # ---------------------------------------------------------------- resolution

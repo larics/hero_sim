@@ -26,7 +26,7 @@ Runs inside the `icuas26_finals` docker container.
 
 Requires `crazyflie_interfaces` (crazyswarm2) in the same workspace.
 
-Optional: if `hero_mrs_msgs` (from hero_mrs_control_stack) is also in the workspace, the dock ride-along node (`/sim/attach_agent`) starts automatically. Without it, that node is skipped and everything else runs normally. Called with an empty `parent_id`, the same service locks a UAV in place instead (used for a UAV hanging from a branch perch, since the sim has no gripper).
+Optional: if `hero_mrs_msgs` (from hero_mrs_control_stack) is also in the workspace, the dock ride-along node (`/sim/attach_agent`) starts automatically. Without it, that node is skipped and everything else runs normally. Called with an empty `parent_id`, the same service locks a UAV in place instead (used for a UAV hanging from a branch perch, see [Grippers](#grippers)).
 
 ## Usage
 
@@ -81,6 +81,24 @@ blender -b --factory-startup -P models/bake_mesh.py -- \
 ```
 
 Robots made of several `.dae` parts (like the scout, from agilex_sitl's meshes) are first combined into one OBJ with `models/assemble_dae.py`; its header has the command. Then register the mesh in `MODEL_MESHES` in `hero_sim/config.py`.
+
+## Grippers
+
+A Crazyflie with `gripper: true` carries a two-claw gripper on top, drawn in RViz and open at the start:
+
+```yaml
+crazyflies:
+  - pose: {x: 1.5, y: 0.5, z: 0.03}
+    gripper: true
+```
+
+Locking the UAV in place (`/sim/attach_agent` with an empty `parent_id`, as when it hangs from a branch) closes the gripper. Detaching leaves the gripper on the branch, and the UAV flies off without it. To fit a new one:
+
+```bash
+ros2 service call /sim/cf_1/add_gripper std_srvs/srv/Trigger
+```
+
+The attach node runs the grippers, so they also need `hero_mrs_msgs`.
 
 ## Driving the robots
 

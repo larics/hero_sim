@@ -11,8 +11,12 @@ once, keyed by child_id.
 
 An empty parent_id locks the child where it is: its current world pose is
 frozen and held until detach. hero_mrs_control_stack's gripper_perch_node uses
-this for a UAV hanging from a branch perch — the sim has no gripper, so
-without the lock a disarmed UAV would not stay on the branch.
+this for a UAV hanging from a branch perch — the sim has no gripper physics,
+so without the lock a disarmed UAV would not stay on the branch.
+
+The lock also drives the drawn gripper (hero_sim/gripper.py): locking shuts
+the UAV's gripper, and detaching leaves it on the branch at the lock pose.
+This node serves /sim/<cf>/add_gripper to fit a fresh one.
 
 hero_mrs_msgs (from hero_mrs_control_stack) is an optional dependency of
 hero_sim; sim.launch.py only starts this node when it is installed.
@@ -30,6 +34,8 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
+from hero_sim import config
+from hero_sim.gripper import Grippers
 from hero_sim.kinematics import quat_to_yaw, wrap_angle
 
 
@@ -59,6 +65,7 @@ class SimAttachNode(Node):
 
     def __init__(self):
         super().__init__('sim_attach_node')
+        self.declare_parameter('config_path', '')
         self.declare_parameter('follow_rate', 50.0)
         # Wait budget (s) for an agent's first pose sample on attach.
         self.declare_parameter('pose_wait_timeout', 3.0)
@@ -82,8 +89,13 @@ class SimAttachNode(Node):
         self.create_timer(1.0 / follow_rate if follow_rate > 0 else 0.02,
                           self._follow_tick, callback_group=self._cbg)
 
+        scenario = config.load(config.resolve_config(self.get_parameter('config_path').value))
+        self._grippers = Grippers(self, scenario.crazyflies)
+
+        fitted = [cf.name for cf in scenario.crazyflies if cf.gripper]
         self.get_logger().info(
-            f'sim_attach up: service=/sim/attach_agent follow_rate={follow_rate:g}Hz')
+            f'sim_attach up: service=/sim/attach_agent follow_rate={follow_rate:g}Hz '
+            f'grippers on: {", ".join(fitted) or "none"}')
 
     # ------------------------------------------------------------------ poses
 
@@ -172,8 +184,10 @@ class SimAttachNode(Node):
             self._couples[child] = _Couple(None, cx, cy, cz, cyaw, publisher)
             if old is not None:
                 self.destroy_publisher(old.publisher)
+        shut = self._grippers.close(child)
         self.get_logger().info(
-            f'LOCK {child} at ({cx:.3f}, {cy:.3f}, {cz:.3f}) yaw={cyaw:.3f}')
+            f'LOCK {child} at ({cx:.3f}, {cy:.3f}, {cz:.3f}) yaw={cyaw:.3f}'
+            + (', gripper shut' if shut else ''))
         response.success = True
         response.message = f'locked {child} in place'
         return response
@@ -188,9 +202,12 @@ class SimAttachNode(Node):
             response.message = f'{child} was not attached (no-op)'
             return response
         where = couple.parent_id or 'its lock'
-        self.get_logger().info(f'DETACH {child} <- {where}')
+        left = couple.parent_id is None and self._grippers.release(
+            child, couple.local_x, couple.local_y, couple.dz, couple.dyaw)
+        note = ', gripper left behind' if left else ''
+        self.get_logger().info(f'DETACH {child} <- {where}{note}')
         response.success = True
-        response.message = f'detached {child} from {where}'
+        response.message = f'detached {child} from {where}{note}'
         return response
 
     # -------------------------------------------------------------- follow loop
