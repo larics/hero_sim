@@ -112,3 +112,20 @@ ros2 service call /all/land crazyflie_interfaces/srv/Land "{height: 0.0, duratio
 ```
 
 Ground robots hold the last `cmd_vel` until a new one arrives. Poses are published on `/<name>/pose` and as TF from `world`.
+
+## Map collisions
+
+Robots can't drive or fly into the map. The octomap's voxels between 0.2 m and 2.0 m high (`sim.collision_z`) are flattened into a 2D obstacle grid, which keeps the trunks and posts and leaves out the floor, ceilings and tree canopies. Each robot is a circle of its `radius`, and a move stops where that circle would touch an obstacle. The robot moves again as soon as it's commanded away. Height changes always go through, so a drone blocked by a trunk can still climb or land, but it can't fly over the trunk.
+
+```yaml
+ground_robots:
+  - name: scout_1
+    model: scout                        # radius defaults to the model's: scout 0.42, herover 0.17, else 0.3
+    radius: 0.45                        # or set it
+crazyflies:
+  - pose: {x: 1.5, y: 0.5, z: 0.03}     # radius 0.1 by default
+sim:
+  collision: false                      # turn it off
+```
+
+Every motion command is checked, including `go_to`, `cmd_hover`, `cmd_position` and the dock ride-along. `/<cf>/set_position` is a teleport and isn't checked. A robot that starts inside an obstacle gets a warning at launch and can move out but not further in.

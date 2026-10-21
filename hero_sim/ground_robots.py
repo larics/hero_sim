@@ -3,6 +3,9 @@
 cmd_vel is a body-frame Twist held until the next message. omni robots honor
 linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
 published in 'world' at z=0, along with a world -> <name> transform.
+
+With a map and sim.collision on, a robot stops where its footprint would hit
+an obstacle (hero_sim/obstacles.py) and resumes when cmd_vel points away.
 """
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 import rclpy
@@ -10,18 +13,19 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import TransformBroadcaster
 
-from hero_sim import config
+from hero_sim import config, obstacles
 from hero_sim.kinematics import integrate_ground, limit_ground_cmd, yaw_to_quat
 
 FRAME = 'world'
 
 
 class _Robot:
-    __slots__ = ('name', 'drive', 'x', 'y', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
+    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
 
     def __init__(self, spec, pose_pub):
         self.name = spec.name
         self.drive = spec.drive
+        self.radius = spec.radius
         self.x, self.y, self.yaw = spec.x, spec.y, spec.yaw
         self.vx = self.vy = self.wz = 0.0
         self.pose_pub = pose_pub
@@ -48,13 +52,21 @@ class GroundRobotSim(Node):
                                      lambda msg, r=robot: self._on_cmd_vel(r, msg), qos)
             self._robots.append(robot)
 
+        self._obstacles = obstacles.load(sim, [r.radius for r in self._robots])
+        if self._obstacles is not None:
+            for r in self._robots:
+                if self._obstacles.clearance(r.x, r.y) < r.radius:
+                    self.get_logger().warn(f'{r.name} starts overlapping a map obstacle; '
+                                           'it can only move away from it')
+
         self._tf = TransformBroadcaster(self)
         self.create_timer(self._dt, self._tick)
 
         summary = ', '.join(f'{r.name}({r.drive})' for r in self._robots) or 'none'
+        collisions = 'off' if self._obstacles is None else 'on'
         self.get_logger().info(
             f'ground robots at {sim["ground_rate"]:g} Hz, max {self._max_speed:g} m/s, '
-            f'{self._max_yaw_rate:g} rad/s: {summary}')
+            f'{self._max_yaw_rate:g} rad/s, map collisions {collisions}: {summary}')
 
     def _on_cmd_vel(self, robot, msg):
         robot.vx, robot.vy, robot.wz = limit_ground_cmd(
@@ -65,7 +77,10 @@ class GroundRobotSim(Node):
         stamp = self.get_clock().now().to_msg()
         transforms = []
         for r in self._robots:
-            r.x, r.y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            x, y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            if self._obstacles is not None:
+                x, y = self._obstacles.move(r.x, r.y, x, y, r.radius)
+            r.x, r.y = x, y
             qx, qy, qz, qw = yaw_to_quat(r.yaw)
 
             pose = PoseStamped()

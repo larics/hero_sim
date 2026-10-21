@@ -45,6 +45,23 @@ def test_model_meshes_exist():
         assert (CONFIG_DIR.parent / 'models' / rel).is_file(), rel
 
 
+def test_footprint_radius_defaults_by_model_and_overrides():
+    s = parse('''
+ground_robots:
+  - {name: s, model: scout}
+  - {name: h, model: herover}
+  - {name: r}
+  - {name: w, model: scout, radius: 0.5}
+crazyflies: [{pose: {}}, {pose: {}, radius: 0.2}]
+''')
+    assert [r.radius for r in s.ground_robots] == [0.42, 0.17, config.DEFAULT_GROUND_RADIUS, 0.5]
+    assert [cf.radius for cf in s.crazyflies] == [config.FOOTPRINT_RADII['crazyflie'], 0.2]
+
+
+def test_collision_z_becomes_a_float_pair():
+    assert parse('sim: {collision_z: [0, 3]}').sim['collision_z'] == (0.0, 3.0)
+
+
 def test_crazyflie_gripper_is_optional():
     s = parse('crazyflies: [{pose: {}, gripper: true}, {pose: {}}]')
     assert [cf.gripper for cf in s.crazyflies] == [True, False]
@@ -71,6 +88,11 @@ def test_drive_is_case_insensitive():
     ('sim: {ground_rate: 0}', 'ground_rate must be > 0'),
     ('sim: {cf_battery_drain: -1}', 'cf_battery_drain must be >= 0'),
     ('sim: {attach: maybe}', 'attach must be auto, true or false'),
+    ('sim: {collision: maybe}', 'collision must be true or false'),
+    ('sim: {collision_z: 1.0}', r'collision_z must be \[z_min, z_max\]'),
+    ('sim: {collision_z: [2.0, 1.0]}', r'collision_z must be \[z_min, z_max\]'),
+    ('ground_robots: [{name: a, radius: -1}]', r'\(a\): radius must be >= 0'),
+    ('crazyflies: [{radius: -0.1}]', r'\(cf_1\): radius must be >= 0'),
 ])
 def test_rejects_bad_config(text, match):
     with pytest.raises(ValueError, match=match):

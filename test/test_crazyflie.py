@@ -5,7 +5,7 @@ import pytest
 pytest.importorskip('rclpy')
 pytest.importorskip('crazyflie_interfaces')
 
-from conftest import duration  # noqa: E402
+from conftest import duration, wall_map  # noqa: E402
 from crazyflie_interfaces.msg import FullState, Hover, Position, Status, VelocityWorld  # noqa: E402
 from crazyflie_interfaces.srv import Arm, GoTo, Land, NotifySetpointsStop, Takeoff  # noqa: E402
 from geometry_msgs.msg import Point, Quaternion  # noqa: E402
@@ -194,3 +194,33 @@ def test_update_returns_world_transform(cf):
     assert (t.header.frame_id, t.child_frame_id) == ('world', 'cf_test')
     assert (t.transform.translation.x, t.transform.translation.y,
             t.transform.translation.z) == (1.0, 2.0, 3.0)
+
+
+@pytest.fixture()
+def walled_cf(node):
+    """Drone at the origin with a wall 1 m ahead in +x (conftest.wall_map)."""
+    return SimCrazyflie(node, 'cf_test', (0.0, 0.0, 0.0), dt=0.1, radius=0.1,
+                        obstacles=wall_map())
+
+
+def test_obstacle_stops_go_to_but_not_height(walled_cf):
+    takeoff(walled_cf, height=1.0, sec=1)
+    run(walled_cf, 12)
+    go_to(walled_cf, 2, 0, 1.5, sec=2)
+    run(walled_cf, 25)
+    assert 0.7 < walled_cf.position[0] < 1.0 - walled_cf.radius
+    assert walled_cf.position[2] == pytest.approx(1.5)
+
+
+def test_obstacle_stops_setpoints(walled_cf):
+    walled_cf._cmd_position_cb(Position(x=1.5, y=0.0, z=1.0, yaw=0.0))
+    assert walled_cf.position[0] < 0.9 and walled_cf.position[2] == 1.0
+    walled_cf._cmd_position_cb(Position(x=0.0, y=2.0, z=1.0, yaw=0.0))  # clear of the wall
+    np.testing.assert_allclose(walled_cf.position, [0, 2, 1])
+
+
+def test_set_position_teleports_past_obstacles(walled_cf):
+    req = GoTo.Request(goal=Point(x=1.5, y=0.0, z=1.0))
+    walled_cf._set_position_cb(req, GoTo.Response())
+    walled_cf.update()
+    assert walled_cf.position[0] == 1.5

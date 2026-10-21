@@ -7,6 +7,8 @@
 #   drive: omni    holonomic, honors linear.x, linear.y and angular.z (default)
 #   drive: diff    non-holonomic, linear.y is ignored
 #   model: scout | herover   RViz mesh drawn on the robot's frame; leave out for TF axes only
+#   radius: 0.42   footprint (m) kept out of map obstacles (see sim.collision). Default
+#                  by model: scout 0.42, herover 0.17, no model 0.3. 0 ignores the map
 ground_robots:
   - name: scout_1
     pose: {x: 0.0, y: 0.0, yaw: 0.0}   # m, m, rad
@@ -22,6 +24,7 @@ ground_robots:
 #   gripper: true   starts with an open two-claw gripper on top, drawn in RViz
 #                   (default false). Needs sim_attach (see attach below), which
 #                   shuts it on a branch lock and serves /sim/<cf>/add_gripper.
+#   radius: 0.1     footprint (m) kept out of map obstacles (default 0.1)
 crazyflies:
   - pose: {x: 1.5, y:  0.5, z: 0.03}   # cf_1
     gripper: true
@@ -39,3 +42,6 @@ sim:
   rviz: true                 # RViz with config/sim.rviz
   models: true               # robot meshes in RViz (crazyflies, and ground robots with a model)
   map: icuas26_1             # octomap: maps/<name>.bt, a path to a .bt, or null for none
+  collision: true            # robots stop where their footprint would hit a map obstacle
+  collision_z: [0.2, 2.0]    # m, map heights that count as obstacles, flattened to 2D:
+                             # trunks and posts, not the floor, ceiling or tree canopies

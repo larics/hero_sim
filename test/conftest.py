@@ -36,3 +36,12 @@ def scenario_file(tmp_path, monkeypatch):
 def duration(sec, nanosec=0):
     from builtin_interfaces.msg import Duration
     return Duration(sec=sec, nanosec=nanosec)
+
+
+def wall_map(max_radius=0.5):
+    """ObstacleMap with a 1 m long wall along y, face at x = 1.0, 0.1 m thick, on a 0.1 m grid."""
+    import numpy as np
+    from hero_sim.obstacles import ObstacleMap
+    occupied = np.zeros((10, 2), bool)
+    occupied[:, 0] = True
+    return ObstacleMap(occupied, 1.0, -0.5, 0.1, max_radius)

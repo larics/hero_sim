@@ -116,6 +116,24 @@ def test_ground_robots_publish_pose(make):
     assert got[-1].pose.position.x == pytest.approx(1.0)
 
 
+def test_ground_robots_stop_at_map_obstacles(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    # Heading +x into the icuas26_1 trunk whose west face is at x = -3.3.
+    scenario_file('ground_robots: [{name: r, pose: {x: -4.5, y: 0.15}, radius: 0.3}]\n'
+                  'sim: {ground_rate: 10.0}\n')
+    sim = make(GroundRobotSim)
+    robot = sim._robots[0]
+    sim._on_cmd_vel(robot, twist(vx=1.0))
+    for _ in range(30):  # 3 s at 1 m/s would carry it through the trunk
+        sim._tick()
+    assert robot.x == pytest.approx(-3.3 - robot.radius, abs=0.15)
+    assert sim._obstacles.clearance(robot.x, robot.y) >= robot.radius
+
+    sim._on_cmd_vel(robot, twist(vx=-1.0))  # backing away is never blocked
+    sim._tick()
+    assert robot.x == pytest.approx(-3.3 - robot.radius - 0.1, abs=0.15)
+
+
 def test_robot_models_latched_and_frame_locked(make):
     from rclpy.qos import DurabilityPolicy, QoSProfile
     from visualization_msgs.msg import Marker, MarkerArray

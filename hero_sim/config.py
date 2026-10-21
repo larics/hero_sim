@@ -24,6 +24,8 @@ SIM_DEFAULTS = {
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
+    'collision': True,           # stop robots at map obstacles (2D, see hero_sim/obstacles.py)
+    'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
 }
 
 # RViz meshes by model name, relative to models/. Crazyflies always use
@@ -33,6 +35,16 @@ MODEL_MESHES = {
     'herover': 'herover/herover.glb',
     'scout': 'scout/scout.glb',
 }
+
+# Footprint radius (m) for map collisions, by model: the circle around the
+# mesh seen from above. Ground robots without a model get
+# DEFAULT_GROUND_RADIUS. Any robot can set its own with `radius:`.
+FOOTPRINT_RADII = {
+    'crazyflie': 0.1,
+    'herover': 0.17,
+    'scout': 0.42,
+}
+DEFAULT_GROUND_RADIUS = 0.3
 
 DRIVES = ('omni', 'diff')
 CONFIG_ENV = 'HERO_SIM_CONFIG'
@@ -47,6 +59,7 @@ class GroundRobot:
     yaw: float
     drive: str
     model: str = None  # key of MODEL_MESHES, or None for no mesh
+    radius: float = DEFAULT_GROUND_RADIUS  # m, footprint for map collisions
 
 
 @dataclass(frozen=True)
@@ -56,6 +69,7 @@ class Crazyflie:
     y: float
     z: float
     gripper: bool = False  # starts with an open gripper on top (see hero_sim/gripper.py)
+    radius: float = FOOTPRINT_RADII['crazyflie']  # m, footprint for map collisions
 
 
 @dataclass(frozen=True)
@@ -103,6 +117,13 @@ def parse(raw):
         raise ValueError(f'sim.cf_battery_drain must be >= 0, got {sim["cf_battery_drain"]}')
     if not (isinstance(sim['attach'], bool) or sim['attach'] == 'auto'):
         raise ValueError(f'sim.attach must be auto, true or false, got {sim["attach"]!r}')
+    if not isinstance(sim['collision'], bool):
+        raise ValueError(f'sim.collision must be true or false, got {sim["collision"]!r}')
+    band = sim['collision_z']
+    if not (isinstance(band, (list, tuple)) and len(band) == 2
+            and float(band[0]) < float(band[1])):
+        raise ValueError(f'sim.collision_z must be [z_min, z_max], z_min < z_max, got {band!r}')
+    sim['collision_z'] = (float(band[0]), float(band[1]))
 
     return Scenario(ground, cfs, sim)
 
@@ -147,9 +168,16 @@ def _pose(entry, where, axes):
     return [float(pose.get(a, 0.0)) for a in axes]
 
 
+def _radius(entry, where, default):
+    radius = float(entry.get('radius', default))
+    if radius < 0.0:
+        raise ValueError(f'{where}: radius must be >= 0, got {radius}')
+    return radius
+
+
 def _ground_robot(i, entry):
     where = f'ground_robots[{i}]'
-    _check_keys(entry, ('name', 'pose', 'drive', 'model'), where)
+    _check_keys(entry, ('name', 'pose', 'drive', 'model', 'radius'), where)
     name = entry.get('name')
     if not isinstance(name, str) or not name:
         raise ValueError(f'{where}: name is required')
@@ -161,18 +189,19 @@ def _ground_robot(i, entry):
         raise ValueError(f'{where} ({name}): model must be one of {sorted(MODEL_MESHES)} '
                          f'or left out, got {model!r}')
     x, y, yaw = _pose(entry, f'{where} ({name})', ('x', 'y', 'yaw'))
-    return GroundRobot(name, x, y, yaw, drive, model)
+    radius = _radius(entry, f'{where} ({name})', FOOTPRINT_RADII.get(model, DEFAULT_GROUND_RADIUS))
+    return GroundRobot(name, x, y, yaw, drive, model, radius)
 
 
 def _crazyflie(i, entry):
     name = f'cf_{i + 1}'
     where = f'crazyflies[{i}] ({name})'
-    _check_keys(entry, ('pose', 'gripper'), where)
+    _check_keys(entry, ('pose', 'gripper', 'radius'), where)
     gripper = entry.get('gripper', False)
     if not isinstance(gripper, bool):
         raise ValueError(f'{where}: gripper must be true or false, got {gripper!r}')
     x, y, z = _pose(entry, where, ('x', 'y', 'z'))
-    return Crazyflie(name, x, y, z, gripper)
+    return Crazyflie(name, x, y, z, gripper, _radius(entry, where, FOOTPRINT_RADII['crazyflie']))
 
 
 # ---------------------------------------------------------------- resolution
