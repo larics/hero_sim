@@ -113,6 +113,8 @@ ros2 service call /all/land crazyflie_interfaces/srv/Land "{height: 0.0, duratio
 
 Ground robots hold the last `cmd_vel` until a new one arrives. Poses are published on `/<name>/pose` and as TF from `world`.
 
+As on hardware, where the mocap markers sit on top of the robot, a ground robot's pose is at its marker height rather than on the floor: the top of the deck, scout 0.227 m and herover 0.095 m (0 without a model). Docks the control stack places on a robot are relative to this height. To change it, set `pose: {z: ...}`; the RViz model stays on the floor.
+
 ## Map collisions
 
 Robots can't drive or fly into the map. The octomap's voxels between 0.2 m and 2.0 m high (`sim.collision_z`) are flattened into a 2D obstacle grid, which keeps the trunks and posts and leaves out the floor, ceilings and tree canopies. Each robot is a circle of its `radius`, and a move stops where that circle would touch an obstacle. The robot moves again as soon as it's commanded away. Height changes always go through, so a drone blocked by a trunk can still climb or land, but it can't fly over the trunk.

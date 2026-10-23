@@ -46,6 +46,15 @@ FOOTPRINT_RADII = {
 }
 DEFAULT_GROUND_RADIUS = 0.3
 
+# Height (m) a ground robot's pose reports, by model: on hardware the mocap
+# markers sit on top, so the pose is up there and not on the floor. Measured
+# as the top of the deck in the model's mesh. Ground robots without a model
+# get 0. Any robot can set its own with `pose: {z: ...}`.
+MARKER_HEIGHTS = {
+    'herover': 0.095,
+    'scout': 0.227,
+}
+
 DRIVES = ('omni', 'diff')
 CONFIG_ENV = 'HERO_SIM_CONFIG'
 DEFAULT_CONFIG = 'example.yaml'
@@ -60,6 +69,7 @@ class GroundRobot:
     drive: str
     model: str = None  # key of MODEL_MESHES, or None for no mesh
     radius: float = DEFAULT_GROUND_RADIUS  # m, footprint for map collisions
+    z: float = 0.0  # m, height of the published pose (MARKER_HEIGHTS)
 
 
 @dataclass(frozen=True)
@@ -162,10 +172,10 @@ def _check_keys(d, allowed, where):
         raise ValueError(f'{where}: unknown key(s) {unknown}; allowed: {sorted(allowed)}')
 
 
-def _pose(entry, where, axes):
+def _pose(entry, where, axes, **defaults):
     pose = entry.get('pose') or {}
     _check_keys(pose, axes, f'{where}.pose')
-    return [float(pose.get(a, 0.0)) for a in axes]
+    return [float(pose.get(a, defaults.get(a, 0.0))) for a in axes]
 
 
 def _radius(entry, where, default):
@@ -188,9 +198,10 @@ def _ground_robot(i, entry):
     if model is not None and model not in MODEL_MESHES:
         raise ValueError(f'{where} ({name}): model must be one of {sorted(MODEL_MESHES)} '
                          f'or left out, got {model!r}')
-    x, y, yaw = _pose(entry, f'{where} ({name})', ('x', 'y', 'yaw'))
+    x, y, z, yaw = _pose(entry, f'{where} ({name})', ('x', 'y', 'z', 'yaw'),
+                         z=MARKER_HEIGHTS.get(model, 0.0))
     radius = _radius(entry, f'{where} ({name})', FOOTPRINT_RADII.get(model, DEFAULT_GROUND_RADIUS))
-    return GroundRobot(name, x, y, yaw, drive, model, radius)
+    return GroundRobot(name, x, y, yaw, drive, model, radius, z)
 
 
 def _crazyflie(i, entry):

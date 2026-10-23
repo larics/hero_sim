@@ -58,6 +58,18 @@ crazyflies: [{pose: {}}, {pose: {}, radius: 0.2}]
     assert [cf.radius for cf in s.crazyflies] == [config.FOOTPRINT_RADII['crazyflie'], 0.2]
 
 
+def test_ground_pose_z_defaults_to_marker_height_and_overrides():
+    s = parse('''
+ground_robots:
+  - {name: s, model: scout}
+  - {name: h, model: herover, pose: {x: 1.0}}
+  - {name: r}
+  - {name: w, model: scout, pose: {z: 0.3}}
+''')
+    assert [r.z for r in s.ground_robots] == [config.MARKER_HEIGHTS['scout'],
+                                               config.MARKER_HEIGHTS['herover'], 0.0, 0.3]
+
+
 def test_collision_z_becomes_a_float_pair():
     assert parse('sim: {collision_z: [0, 3]}').sim['collision_z'] == (0.0, 3.0)
 
@@ -74,7 +86,7 @@ def test_drive_is_case_insensitive():
 
 @pytest.mark.parametrize('text, match', [
     ('robots: []', "unknown key.*'robots'"),
-    ('ground_robots: [{name: a, pose: {x: 1, z: 2}}]', r"ground_robots\[0\] \(a\)\.pose: unknown key.*'z'"),
+    ('ground_robots: [{name: a, pose: {x: 1, roll: 2}}]', r"ground_robots\[0\] \(a\)\.pose: unknown key.*'roll'"),
     ('ground_robots: [{name: a, speed: 1}]', "unknown key.*'speed'"),
     ('ground_robots: [{pose: {x: 1}}]', 'name is required'),
     ('ground_robots: [{name: a, drive: tank}]', 'drive must be one of'),

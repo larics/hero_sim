@@ -3,7 +3,10 @@
 
 # Kinematic ground robots. Each one subscribes to /<name>/cmd_vel (body-frame
 # Twist, held until the next message) and publishes /<name>/pose plus TF
-# world -> <name> at z = 0.
+# world -> <name> at the pose's z.
+#   pose: {z: 0.227}   height (m) of the published pose: where the mocap markers sit on
+#                  the real robot. Default by model, the top of its deck: scout 0.227,
+#                  herover 0.095, no model 0. The mesh stays on the floor either way
 #   drive: omni    holonomic, honors linear.x, linear.y and angular.z (default)
 #   drive: diff    non-holonomic, linear.y is ignored
 #   model: scout | herover   RViz mesh drawn on the robot's frame; leave out for TF axes only

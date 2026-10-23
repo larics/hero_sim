@@ -11,6 +11,7 @@ from crazyflie_interfaces.srv import Arm, Takeoff  # noqa: E402
 from std_srvs.srv import Trigger  # noqa: E402
 from geometry_msgs.msg import PoseStamped, Twist  # noqa: E402
 
+from hero_sim import config  # noqa: E402
 from hero_sim.kinematics import yaw_to_quat  # noqa: E402
 
 SCENARIO = """
@@ -114,6 +115,7 @@ def test_ground_robots_publish_pose(make):
     assert got, 'no pose received on /scout_1/pose'
     assert got[-1].header.frame_id == 'world'
     assert got[-1].pose.position.x == pytest.approx(1.0)
+    assert got[-1].pose.position.z == pytest.approx(config.MARKER_HEIGHTS['scout'])
 
 
 def test_ground_robots_stop_at_map_obstacles(make, scenario_file):
@@ -162,6 +164,9 @@ def test_robot_models_latched_and_frame_locked(make):
     assert all(m.type == Marker.MESH_RESOURCE and m.frame_locked
                and m.mesh_use_embedded_materials for m in markers)
     assert markers[2].mesh_resource == 'package://hero_sim/models/scout/scout.glb'
+    # CF meshes sit on their frame; the scout's drops from its marker height to the floor
+    assert [m.pose.position.z for m in markers] == pytest.approx(
+        [0.0, 0.0, -config.MARKER_HEIGHTS['scout']])
     assert len({(m.ns, m.id) for m in markers}) == len(markers)
 
 
@@ -205,7 +210,6 @@ def test_gripper_claws_shut_around_the_bar():
 
 def test_grippers_lifecycle(rclpy_context, node):
     from visualization_msgs.msg import Marker
-    from hero_sim import config
     from hero_sim.gripper import CLOSED, OPEN, Grippers
 
     cfs = (config.Crazyflie('cf_1', 0, 0, 0, gripper=True), config.Crazyflie('cf_2', 0, 0, 0))
@@ -236,7 +240,6 @@ def test_grippers_lifecycle(rclpy_context, node):
 
 
 def test_grippers_not_drawn_without_models(rclpy_context, node):
-    from hero_sim import config
     from hero_sim.gripper import TOPIC, Grippers
 
     grippers = Grippers(node, (config.Crazyflie('cf_1', 0, 0, 0, gripper=True),), draw=False)

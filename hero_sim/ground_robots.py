@@ -2,7 +2,8 @@
 
 cmd_vel is a body-frame Twist held until the next message. omni robots honor
 linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
-published in 'world' at z=0, along with a world -> <name> transform.
+published in 'world' at the robot's pose z (its marker height, see
+config.MARKER_HEIGHTS), along with a world -> <name> transform.
 
 With a map and sim.collision on, a robot stops where its footprint would hit
 an obstacle (hero_sim/obstacles.py) and resumes when cmd_vel points away.
@@ -20,13 +21,13 @@ FRAME = 'world'
 
 
 class _Robot:
-    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
+    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'z', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
 
     def __init__(self, spec, pose_pub):
         self.name = spec.name
         self.drive = spec.drive
         self.radius = spec.radius
-        self.x, self.y, self.yaw = spec.x, spec.y, spec.yaw
+        self.x, self.y, self.z, self.yaw = spec.x, spec.y, spec.z, spec.yaw
         self.vx = self.vy = self.wz = 0.0
         self.pose_pub = pose_pub
 
@@ -86,7 +87,7 @@ class GroundRobotSim(Node):
             pose = PoseStamped()
             pose.header.stamp = stamp
             pose.header.frame_id = FRAME
-            pose.pose.position.x, pose.pose.position.y = r.x, r.y
+            pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = r.x, r.y, r.z
             o = pose.pose.orientation
             o.x, o.y, o.z, o.w = qx, qy, qz, qw
             r.pose_pub.publish(pose)
@@ -95,7 +96,8 @@ class GroundRobotSim(Node):
             t.header.stamp = stamp
             t.header.frame_id = FRAME
             t.child_frame_id = r.name
-            t.transform.translation.x, t.transform.translation.y = r.x, r.y
+            t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = (
+                r.x, r.y, r.z)
             t.transform.rotation = o
             transforms.append(t)
         if transforms:
