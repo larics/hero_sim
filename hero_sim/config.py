@@ -1,14 +1,16 @@
 """Load and validate a hero_sim scenario config. No ROS imports at module level.
 
-A scenario file has three sections (see config/example.yaml):
+A scenario file has these sections (see config/example.yaml):
 
   ground_robots   kinematic ground robots, one entry per robot
   crazyflies      Crazyflies, named cf_1..cf_N in list order
   sim             optional overrides of SIM_DEFAULTS
+  tether          optional winch, tether and object (hero_sim/tether.py)
 
 Unknown keys are rejected so typos fail loudly instead of being ignored.
 """
 from dataclasses import dataclass
+import math
 import os
 from pathlib import Path
 
@@ -83,10 +85,30 @@ class Crazyflie:
 
 
 @dataclass(frozen=True)
+class Tether:
+    """Winch -> pulley on a ground robot -> ring on a Crazyflie -> object on the floor."""
+    winch: tuple   # x, y, z (m): where the tether leaves the drum
+    ugv: str       # ground robot carrying the first pulley (at its pose z)
+    uav: str       # Crazyflie carrying the guide ring
+    object: tuple  # x, y (m): start position on the floor
+    goal: tuple    # x, y, radius (m)
+    obstacles: tuple = ()        # (x, y, radius) pillars (m) the object can't pass through
+    object_size: float = 0.3     # m, cube edge
+    slack: float = 0.5           # m of tether beyond taut at the start
+    max_reel_speed: float = 0.5  # m/s, clamp on /winch/cmd_rate
+
+    @property
+    def object_radius(self):
+        """m, the object's footprint against obstacles: half its edge."""
+        return self.object_size / 2.0
+
+
+@dataclass(frozen=True)
 class Scenario:
     ground_robots: tuple
     crazyflies: tuple
     sim: dict
+    tether: Tether = None
 
 
 def load(path):
@@ -102,7 +124,7 @@ def load(path):
 def parse(raw):
     """Validate an already-loaded scenario mapping and return a Scenario."""
     raw = {} if raw is None else raw
-    _check_keys(raw, ('ground_robots', 'crazyflies', 'sim'), 'top level')
+    _check_keys(raw, ('ground_robots', 'crazyflies', 'sim', 'tether'), 'top level')
 
     ground = tuple(_ground_robot(i, r) for i, r in enumerate(_list(raw, 'ground_robots')))
     names = [r.name for r in ground]
@@ -135,7 +157,8 @@ def parse(raw):
         raise ValueError(f'sim.collision_z must be [z_min, z_max], z_min < z_max, got {band!r}')
     sim['collision_z'] = (float(band[0]), float(band[1]))
 
-    return Scenario(ground, cfs, sim)
+    tether = _tether(raw['tether'], ground, cfs) if raw.get('tether') is not None else None
+    return Scenario(ground, cfs, sim, tether)
 
 
 def attach_enabled(sim):
@@ -213,6 +236,53 @@ def _crazyflie(i, entry):
         raise ValueError(f'{where}: gripper must be true or false, got {gripper!r}')
     x, y, z = _pose(entry, where, ('x', 'y', 'z'))
     return Crazyflie(name, x, y, z, gripper, _radius(entry, where, FOOTPRINT_RADII['crazyflie']))
+
+
+def _point(value, where, axes, **defaults):
+    """A mapping of `axes` as a tuple of floats. Axes without a default are required."""
+    value = value or {}
+    _check_keys(value, axes, where)
+    missing = [a for a in axes if a not in value and a not in defaults]
+    if missing:
+        raise ValueError(f'{where}: missing {missing}')
+    return tuple(float(value.get(a, defaults.get(a))) for a in axes)
+
+
+def _tether(entry, ground, cfs):
+    where = 'tether'
+    _check_keys(entry, ('winch', 'ugv', 'uav', 'object', 'goal', 'obstacles', 'object_size',
+                        'slack', 'max_reel_speed'), where)
+    ugv = entry.get('ugv', ground[0].name if ground else None)
+    if ugv not in {r.name for r in ground}:
+        raise ValueError(f'{where}.ugv must name a ground robot, got {ugv!r}')
+    uav = entry.get('uav', 'cf_1')
+    if uav not in {c.name for c in cfs}:
+        raise ValueError(f'{where}.uav must name a crazyflie (cf_1, ...), got {uav!r}')
+    tether = Tether(
+        winch=_point(entry.get('winch'), f'{where}.winch', ('x', 'y', 'z'), z=0.3),
+        ugv=ugv,
+        uav=uav,
+        object=_point(entry.get('object'), f'{where}.object', ('x', 'y')),
+        goal=_point(entry.get('goal'), f'{where}.goal', ('x', 'y', 'radius'), radius=0.4),
+        obstacles=tuple(_point(o, f'{where}.obstacles[{i}]', ('x', 'y', 'radius'))
+                        for i, o in enumerate(_list(entry, 'obstacles'))),
+        object_size=float(entry.get('object_size', Tether.object_size)),
+        slack=float(entry.get('slack', Tether.slack)),
+        max_reel_speed=float(entry.get('max_reel_speed', Tether.max_reel_speed)),
+    )
+    for key in ('object_size', 'max_reel_speed'):
+        if getattr(tether, key) <= 0.0:
+            raise ValueError(f'{where}.{key} must be > 0, got {getattr(tether, key)}')
+    if tether.slack < 0.0:
+        raise ValueError(f'{where}.slack must be >= 0, got {tether.slack}')
+    if tether.goal[2] <= 0.0:
+        raise ValueError(f'{where}.goal.radius must be > 0, got {tether.goal[2]}')
+    for i, (x, y, r) in enumerate(tether.obstacles):
+        if r <= 0.0:
+            raise ValueError(f'{where}.obstacles[{i}].radius must be > 0, got {r}')
+        if math.hypot(tether.object[0] - x, tether.object[1] - y) < r + tether.object_radius:
+            raise ValueError(f'{where}.object starts inside obstacles[{i}]')
+    return tether
 
 
 # ---------------------------------------------------------------- resolution

@@ -158,3 +158,63 @@ def test_resolve_map_disabled_and_path(tmp_path):
 @pytest.mark.parametrize('path', sorted(CONFIG_DIR.glob('*.yaml')), ids=lambda p: p.name)
 def test_shipped_configs_load(path):
     config.load(path)
+
+
+TETHER_ROBOTS = 'ground_robots: [{name: g1}, {name: g2}]\ncrazyflies: [{pose: {}}, {pose: {}}]\n'
+TETHER_MIN = '{winch: {x: -1, y: 0}, object: {x: 1, y: 2}, goal: {x: 3, y: 4}'
+
+
+def test_tether_is_optional():
+    assert parse(TETHER_ROBOTS).tether is None
+
+
+def test_tether_defaults():
+    t = parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}}}').tether
+    assert (t.ugv, t.uav) == ('g1', 'cf_1')
+    assert t.winch == (-1.0, 0.0, 0.3)
+    assert t.object == (1.0, 2.0)
+    assert t.goal == (3.0, 4.0, 0.4)
+    assert t.obstacles == ()
+    assert (t.object_size, t.object_radius, t.slack, t.max_reel_speed) == (0.3, 0.15, 0.5, 0.5)
+
+
+def test_tether_overrides():
+    t = parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}, ugv: g2, uav: cf_2, object_size: 0.2, '
+                              'obstacles: [{x: 2, y: 2, radius: 0.5}]}').tether
+    assert (t.ugv, t.uav, t.object_radius) == ('g2', 'cf_2', 0.1)
+    assert t.obstacles == ((2.0, 2.0, 0.5),)
+
+
+@pytest.mark.parametrize('extra, match', [
+    (', rope: 1', "tether: unknown key.*'rope'"),
+    (', ugv: nope', 'tether.ugv must name a ground robot'),
+    (', uav: cf_9', r'tether.uav must name a crazyflie'),
+    (', goal: {x: 3, y: 4, z: 0}', r"tether.goal: unknown key.*'z'"),
+    (', goal: {x: 3, y: 4, radius: 0}', 'tether.goal.radius must be > 0'),
+    (', object: {x: 1}', r"tether.object: missing \['y'\]"),
+    (', obstacles: [{x: 0, y: 0}]', r"tether.obstacles\[0\]: missing \['radius'\]"),
+    (', obstacles: [[0, 0, 1]]', r'tether.obstacles\[0\] must be a mapping'),
+    (', obstacles: [{x: 0, y: 0, radius: 0}]', r'tether.obstacles\[0\].radius must be > 0'),
+    (', obstacles: [{x: 1.3, y: 2, radius: 0.2}]', r'tether.object starts inside obstacles\[0\]'),
+    (', object_size: 0', 'tether.object_size must be > 0'),
+    (', max_reel_speed: -1', 'tether.max_reel_speed must be > 0'),
+    (', slack: -1', 'tether.slack must be >= 0'),
+])
+def test_rejects_bad_tether(extra, match):
+    with pytest.raises(ValueError, match=match):
+        parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}{extra}}}')
+
+
+@pytest.mark.parametrize('text, match', [
+    ('tether: [1]', 'tether must be a mapping'),
+    ('tether: {winch: {x: 0, y: 0}, object: {x: 1, y: 0}, goal: {x: 2, y: 0}}',
+     'tether.ugv must name a ground robot'),
+    ('ground_robots: [{name: g1}]\n'
+     'tether: {winch: {x: 0, y: 0}, object: {x: 1, y: 0}, goal: {x: 2, y: 0}}',
+     'tether.uav must name a crazyflie'),
+    (TETHER_ROBOTS + 'tether: {object: {x: 1, y: 0}, goal: {x: 2, y: 0}}',
+     r"tether.winch: missing \['x', 'y'\]"),
+])
+def test_rejects_tether_without_its_parts(text, match):
+    with pytest.raises(ValueError, match=match):
+        parse(text)

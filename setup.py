@@ -33,6 +33,7 @@ setup(
             'ground_robot_sim = hero_sim.ground_robots:main',
             'sim_attach = hero_sim.attach:main',
             'robot_models = hero_sim.robot_models:main',
+            'tether_sim = hero_sim.tether_sim:main',
         ],
     },
 )

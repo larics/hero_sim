@@ -128,6 +128,18 @@ Visualization Manager:
         Value: /hero_sim/grippers
       Value: true
     - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Tether
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /hero_sim/tether
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: MarkerArray
       Namespaces:

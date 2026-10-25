@@ -48,3 +48,18 @@ sim:
   collision: true            # robots stop where their footprint would hit a map obstacle
   collision_z: [0.2, 2.0]    # m, map heights that count as obstacles, flattened to 2D:
                              # trunks and posts, not the floor, ceiling or tree canopies
+
+# Optional: a winch drags an object across the floor with a tether through a
+# pulley on a ground robot and a ring on a Crazyflie (README "Tether task",
+# config/tether_demo.yaml). Leave it out and nothing extra runs.
+# tether:
+#   winch: {x: -3.0, y: 0.0, z: 0.3}    # m, x and y required; z: where the tether leaves the drum
+#   ugv: scout_1                         # pulley on its deck (default: the first ground robot)
+#   uav: cf_1                            # ring (default cf_1)
+#   object: {x: 0.5, y: -0.5}            # required, start on the floor
+#   object_size: 0.3                     # m, cube edge; half of it is its footprint against pillars
+#   goal: {x: 2.5, y: 1.5, radius: 0.4}  # x and y required
+#   obstacles:                           # pillars only the object can't pass through
+#     - {x: 1.5, y: 0.5, radius: 0.35}
+#   slack: 0.5                           # m of tether beyond taut at the start
+#   max_reel_speed: 0.5                  # m/s, clamp on /winch/cmd_rate

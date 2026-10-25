@@ -131,3 +131,52 @@ sim:
 ```
 
 Every motion command is checked, including `go_to`, `cmd_hover`, `cmd_position` and the dock ride-along. `/<cf>/set_position` is a teleport and isn't checked. A robot that starts inside an obstacle gets a warning at launch and can move out but not further in.
+
+## Tether task
+
+A winch drags an object across the floor. The tether runs from the winch, through a pulley on a ground robot (UGV), through a ring on a Crazyflie (UAV), down to the object. A scenario sets it up with a `tether:` section; `config/tether_demo.yaml` is a ready one:
+
+```bash
+bash start.sh tether_demo.yaml
+```
+
+```yaml
+tether:
+  winch: {x: -3.0, y: 0.0, z: 0.3}      # m; z is where the tether leaves the drum (default 0.3)
+  ugv: herover_1                         # pulley on its deck, at its pose z (default: the first ground robot)
+  uav: cf_1                              # ring (default cf_1)
+  object: {x: 0.5, y: -0.5}              # start, on the floor
+  object_size: 0.3                       # m, cube edge (default 0.3)
+  goal: {x: 2.5, y: 1.5, radius: 0.4}    # radius defaults to 0.4
+  obstacles:                             # optional pillars
+    - {x: 1.5, y: 0.5, radius: 0.35}
+  slack: 3.0                             # m of tether beyond taut at the start (default 0.5)
+  max_reel_speed: 0.5                    # m/s (default 0.5)
+```
+
+The winch pays out a length L. What the two pulleys don't use is the free tether below the UAV: l = L − |winch − UGV| − |UGV − UAV|. The model is quasi-static (no swing):
+
+- While the tether is slack, the object stays where it is.
+- Once it's taut, the object slides along the floor straight toward the point under the UAV.
+- The object is never lifted. Once it is under the UAV, the winch slips instead.
+- Pulled into a pillar, the object jams where it touches it and the winch slips. A pull away from the pillar frees it.
+- The robots never feel the tether: moving them only drags the object or makes the winch slip. The tether and the robots pass through pillars, and the object ignores the map's obstacles; only pillars block the object.
+
+Drive the UGV with `/<ugv>/cmd_vel` and fly the UAV with its Crazyflie services, as in [Driving the robots](#driving-the-robots). The winch and the object:
+
+| Topic | Type | |
+|---|---|---|
+| `/winch/cmd_rate` | `std_msgs/Float64` | in, m/s: + pays out, − reels in. Held until the next message |
+| `/winch/length` | `std_msgs/Float64` | L |
+| `/tether/free_length` | `std_msgs/Float64` | l |
+| `/tether/taut` | `std_msgs/Bool` | |
+| `/tether/stuck` | `std_msgs/Bool` | object jammed against a pillar |
+| `/tether/object_pose` | `geometry_msgs/PoseStamped` | object center |
+| `/tether/goal` | `geometry_msgs/PoseStamped` | goal center, latched |
+| `/tether/goal_reached` | `std_msgs/Bool` | object center inside the goal circle |
+
+```bash
+ros2 topic pub /winch/cmd_rate std_msgs/msg/Float64 "{data: -0.3}"   # reel in
+```
+
+Without a `tether:` section, nothing extra runs.

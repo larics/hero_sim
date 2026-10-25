@@ -315,3 +315,63 @@ def test_attach_fails_without_pose(make):
     req = AttachAgent.Request(child_id='cf_9', parent_id='ghost', attach=True)
     resp = node._on_request(req, AttachAgent.Response())
     assert not resp.success and 'ghost' in resp.message
+
+
+TETHER_SCENARIO = """
+ground_robots:
+  - name: ugv
+    pose: {x: -1.0, y: 0.0}
+crazyflies:
+  - pose: {x: 1.0, y: 0.0, z: 1.0}
+tether:
+  winch: {x: -2.0, y: 0.0, z: 0.0}
+  object: {x: 3.0, y: 0.0}
+  object_size: 0.2
+  goal: {x: 1.0, y: 0.0, radius: 0.3}
+  slack: 0.0
+  max_reel_speed: 1.0
+sim: {ground_rate: 10.0}
+"""
+
+
+def pose_msg(x, y, z):
+    msg = PoseStamped()
+    msg.pose.position.x, msg.pose.position.y, msg.pose.position.z = x, y, z
+    return msg
+
+
+def test_tether_sim_reels_the_object_in(rclpy_context, scenario_file):
+    from std_msgs.msg import Float64
+    from hero_sim.tether_sim import TetherSim
+
+    scenario_file(TETHER_SCENARIO)
+    node = TetherSim()
+    try:
+        node._tick()  # no poses yet: waits
+        assert node._state is None
+
+        node._on_ugv(pose_msg(-1.0, 0.0, 0.0))
+        node._on_uav(pose_msg(1.0, 0.0, 1.0))
+        node._tick()
+        start = node._length
+        assert node._state.obj == pytest.approx((3.0, 0.0))
+        assert node._state.taut  # slack 0: taut from the start
+
+        node._on_rate(Float64(data=-5.0))  # clamped to max_reel_speed 1.0
+        node._tick()
+        assert node._length == pytest.approx(start - 0.1)  # 1 m/s at 10 Hz
+        assert 1.0 < node._state.obj[0] < 3.0
+        assert not node._reached
+
+        for _ in range(30):
+            node._tick()
+        assert node._state.obj == pytest.approx((1.0, 0.0))  # under the UAV, never lifted
+        assert node._reached
+    finally:
+        node.destroy_node()
+
+
+def test_tether_sim_needs_a_tether_section(make):
+    from hero_sim.tether_sim import TetherSim
+    with pytest.raises(RuntimeError, match='no tether'):
+        make(TetherSim)
