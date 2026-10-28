@@ -105,6 +105,8 @@ The attach node runs the grippers, so they also need `hero_mrs_msgs`. Like the r
 ```bash
 # ground robot
 ros2 topic pub /scout_1/cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}}"
+ros2 service call /scout_1/go_to crazyflie_interfaces/srv/GoTo \
+    "{goal: {x: 1.0, y: 0.5}, yaw: 1.57, duration: {sec: 3}}"
 
 # crazyflie
 ros2 service call /cf_1/takeoff crazyflie_interfaces/srv/Takeoff "{height: 1.0, duration: {sec: 2}}"
@@ -112,6 +114,13 @@ ros2 service call /all/land crazyflie_interfaces/srv/Land "{height: 0.0, duratio
 ```
 
 Ground robots hold the last `cmd_vel` until a new one arrives. Poses are published on `/<name>/pose` and as TF from `world`.
+
+A ground robot's `go_to` uses the same service type as the Crazyflies':
+
+- It reaches the goal's x, y and yaw in `duration`, or more slowly if that's needed to stay within `sim.ground_max_speed` and `sim.ground_max_yaw_rate` (2 m/s and 2 rad/s by default; `duration: 0` means as fast as allowed).
+- An omni robot drives straight while it turns. A diff robot turns to face the goal, drives, then turns to the yaw.
+- `relative: true` makes x and y an offset from where the robot is, in the world frame; yaw stays absolute. `goal.z` and `group_mask` are ignored.
+- Any `cmd_vel` message cancels it, and it stops at [obstacles](#obstacles) like every other move.
 
 As on hardware, where the mocap markers sit on top of the robot, a ground robot's pose is at its marker height rather than on the floor: the top of the deck, scout 0.227 m and herover 0.095 m (0 without a model). Docks the control stack places on a robot are relative to this height. To change it, set `pose: {z: ...}`; the RViz model stays on the floor.
 

@@ -5,7 +5,8 @@
 #
 #   bash start.sh tether_demo.yaml      # sim + RViz
 #
-# Controls: /herover_1/cmd_vel, /cf_1/takeoff|go_to|land, /winch/cmd_rate (m/s, + out, - in).
+# Controls: /herover_1/cmd_vel or /herover_1/go_to, /cf_1/takeoff|go_to|land,
+#           /winch/cmd_rate (m/s, + out, - in).
 # Feedback: /tether/object_pose, /tether/goal, /tether/taut, /tether/free_length,
 #           /tether/stuck, /tether/goal_reached, /winch/length, /hero_sim/obstacles.
 #           See README "Tether task".

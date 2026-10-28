@@ -19,8 +19,8 @@ import yaml
 
 SIM_DEFAULTS = {
     'ground_rate': 50.0,         # Hz, ground robot integration + /pose rate
-    'ground_max_speed': 2.0,     # m/s, clamp on |(linear.x, linear.y)|
-    'ground_max_yaw_rate': 2.0,  # rad/s, clamp on |angular.z|
+    'ground_max_speed': 2.0,     # m/s, clamp on |(linear.x, linear.y)| and go_to
+    'ground_max_yaw_rate': 2.0,  # rad/s, clamp on |angular.z| and go_to
     'cf_rate': 10.0,             # Hz, Crazyflie update + /pose rate
     'cf_battery_drain': 0.025,   # V/s while flying (starts at 4.2 V, floor 3.0 V)
     'attach': 'auto',            # sim_attach dock ride-along: auto | true | false (see attach_enabled)

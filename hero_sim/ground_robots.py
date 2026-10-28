@@ -5,12 +5,18 @@ linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
 published in 'world' at the robot's pose z (its marker height, see
 config.MARKER_HEIGHTS), along with a world -> <name> transform.
 
+/<name>/go_to (crazyflie_interfaces/srv/GoTo, as for the Crazyflies) drives
+to goal x, y and yaw in `duration`, or slower to stay within the speed limits
+(kinematics.GroundGoTo). relative makes x, y an offset in the world frame;
+goal.z and group_mask are ignored. Any cmd_vel message cancels it.
+
 With sim.collision on, a robot stops where its footprint would hit the map or
 a pillar (hero_sim/obstacles.py) and resumes when cmd_vel points away.
 
 This node also draws the scenario's pillars (its obstacles: list), latched on
 /hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter.
 """
+from crazyflie_interfaces.srv import GoTo
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 import rclpy
 from rclpy.node import Node
@@ -19,7 +25,7 @@ from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
 from hero_sim import config, obstacles
-from hero_sim.kinematics import integrate_ground, limit_ground_cmd, yaw_to_quat
+from hero_sim.kinematics import GroundGoTo, integrate_ground, limit_ground_cmd, yaw_to_quat
 
 FRAME = 'world'
 OBSTACLE_TOPIC = '/hero_sim/obstacles'
@@ -27,7 +33,8 @@ PILLAR_HEIGHT = 2.0  # m, drawn only: pillars block at any height
 
 
 class _Robot:
-    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'z', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
+    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'z', 'yaw', 'vx', 'vy', 'wz', 'pose_pub',
+                 'go_to', 'go_to_t')
 
     def __init__(self, spec, pose_pub):
         self.name = spec.name
@@ -36,6 +43,8 @@ class _Robot:
         self.x, self.y, self.z, self.yaw = spec.x, spec.y, spec.z, spec.yaw
         self.vx = self.vy = self.wz = 0.0
         self.pose_pub = pose_pub
+        self.go_to = None  # GroundGoTo while one runs
+        self.go_to_t = 0.0  # s into it
 
 
 class GroundRobotSim(Node):
@@ -57,6 +66,8 @@ class GroundRobotSim(Node):
             robot = _Robot(spec, self.create_publisher(PoseStamped, f'/{spec.name}/pose', qos))
             self.create_subscription(Twist, f'/{spec.name}/cmd_vel',
                                      lambda msg, r=robot: self._on_cmd_vel(r, msg), qos)
+            self.create_service(GoTo, f'/{spec.name}/go_to',
+                                lambda req, resp, r=robot: self._on_go_to(r, req, resp))
             self._robots.append(robot)
 
         self._obstacles = obstacles.load(sim, [r.radius for r in self._robots],
@@ -102,15 +113,38 @@ class GroundRobotSim(Node):
         self._pillar_pub.publish(MarkerArray(markers=markers))
 
     def _on_cmd_vel(self, robot, msg):
+        robot.go_to = None
         robot.vx, robot.vy, robot.wz = limit_ground_cmd(
             msg.linear.x, msg.linear.y, msg.angular.z,
             robot.drive, self._max_speed, self._max_yaw_rate)
+
+    def _on_go_to(self, robot, request, response):
+        x, y = request.goal.x, request.goal.y
+        if request.relative:
+            x, y = robot.x + x, robot.y + y
+        duration = request.duration.sec + request.duration.nanosec * 1e-9
+        robot.go_to = GroundGoTo((robot.x, robot.y, robot.yaw), (x, y, request.yaw), robot.drive,
+                                 duration, self._max_speed, self._max_yaw_rate)
+        robot.go_to_t = 0.0
+        robot.vx = robot.vy = robot.wz = 0.0
+        total = robot.go_to.total
+        slower = f' (asked {duration:.2f}s, held to the speed limits)' if total > duration else ''
+        self.get_logger().info(
+            f'[{robot.name}] GO_TO ({x:.2f}, {y:.2f}) yaw={request.yaw:.2f} '
+            f'in {total:.2f}s{slower}')
+        return response
 
     def _tick(self):
         stamp = self.get_clock().now().to_msg()
         transforms = []
         for r in self._robots:
-            x, y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            if r.go_to is not None:
+                r.go_to_t += self._dt
+                x, y, r.yaw = r.go_to.at(r.go_to_t)
+                if r.go_to_t >= r.go_to.total:
+                    r.go_to = None
+            else:
+                x, y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
             if self._obstacles is not None:
                 x, y = self._obstacles.move(r.x, r.y, x, y, r.radius)
             r.x, r.y = x, y

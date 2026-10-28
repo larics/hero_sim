@@ -190,6 +190,100 @@ def test_collision_off_ignores_pillars(make, scenario_file):
     assert robot.x == pytest.approx(2.0)
 
 
+GO_TO_SCENARIO = """
+ground_robots:
+  - name: omni_1
+    pose: {x: 0.0, y: 0.0}
+  - name: diff_1
+    pose: {x: 0.0, y: 2.0}
+    drive: diff
+obstacles:
+  - {x: 3.0, y: 0.0, radius: 0.2}
+sim: {map: null, ground_rate: 10.0, ground_max_speed: 1.0, ground_max_yaw_rate: 2.0}
+"""
+
+
+def go_to(x, y, yaw=0.0, sec=0, relative=False):
+    return GoTo.Request(goal=Point(x=x, y=y, z=5.0), yaw=yaw, duration=duration(sec),
+                        relative=relative)
+
+
+@pytest.fixture()
+def ground(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(GO_TO_SCENARIO)
+    return make(GroundRobotSim)
+
+
+def test_ground_go_to_reaches_the_goal(ground):
+    omni, _ = ground._robots
+    ground._on_go_to(omni, go_to(1.0, 0.5, yaw=0.5, sec=2), GoTo.Response())
+    assert omni.go_to.total == 2.0
+    for _ in range(10):
+        ground._tick()
+    assert (omni.x, omni.y, omni.yaw) == pytest.approx((0.5, 0.25, 0.25))
+    for _ in range(15):
+        ground._tick()
+    assert (omni.x, omni.y, omni.yaw) == pytest.approx((1.0, 0.5, 0.5))
+    assert omni.go_to is None  # done: the robot holds still
+    ground._tick()
+    assert (omni.x, omni.y) == pytest.approx((1.0, 0.5))
+
+
+def test_ground_go_to_held_to_max_speed(ground):
+    omni, _ = ground._robots
+    ground._on_go_to(omni, go_to(2.0, 0.0), GoTo.Response())  # duration 0
+    assert omni.go_to.total == pytest.approx(2.0)  # ground_max_speed 1 m/s
+    for _ in range(10):
+        ground._tick()
+    assert omni.x == pytest.approx(1.0)
+
+
+def test_ground_go_to_relative_and_diff(ground):
+    _, diff = ground._robots
+    ground._on_go_to(diff, go_to(1.0, 0.0, relative=True), GoTo.Response())
+    for _ in range(15):
+        ground._tick()
+    assert (diff.x, diff.y, diff.yaw) == pytest.approx((1.0, 2.0, 0.0))
+
+
+def test_cmd_vel_cancels_a_go_to(ground):
+    omni, _ = ground._robots
+    ground._on_go_to(omni, go_to(2.0, 0.0, sec=4), GoTo.Response())
+    for _ in range(5):
+        ground._tick()
+    ground._on_cmd_vel(omni, twist())
+    assert omni.go_to is None
+    stopped = omni.x
+    for _ in range(5):
+        ground._tick()
+    assert omni.x == stopped == pytest.approx(0.25)
+
+
+def test_ground_go_to_stops_at_a_pillar(ground):
+    omni, _ = ground._robots
+    ground._on_go_to(omni, go_to(5.0, 0.0), GoTo.Response())
+    for _ in range(60):
+        ground._tick()
+    assert 2.5 - 0.05 <= omni.x <= 2.5  # pillar edge at 2.8, minus the radius 0.3
+    assert omni.go_to is None
+
+
+def test_ground_go_to_service_call(ground, make):
+    client = make(lambda: rclpy.create_node('go_to_client'))
+    cli = client.create_client(GoTo, '/diff_1/go_to')
+    assert cli.wait_for_service(timeout_sec=2.0)
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(ground)
+    executor.add_node(client)
+    future = cli.call_async(go_to(1.0, 3.0, sec=2))
+    executor.spin_until_future_complete(future, timeout_sec=2.0)
+    executor.shutdown()
+    assert future.done()
+    goal = ground._robots[1].go_to.goal
+    assert goal == pytest.approx((1.0, 3.0, 0.0))
+
+
 def _latched(make, topic, publisher_cls):
     """The first MarkerArray a late TRANSIENT_LOCAL subscriber gets on `topic`."""
     from rclpy.qos import DurabilityPolicy, QoSProfile
