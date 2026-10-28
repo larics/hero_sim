@@ -5,11 +5,16 @@ import pytest
 
 from conftest import CONFIG_DIR, wall_map
 from hero_sim import config
-from hero_sim.obstacles import ObstacleMap, load, read_bt
+from hero_sim.obstacles import PILLAR_RES, ObstacleMap, load, read_bt
 
 MAPS = sorted((CONFIG_DIR.parent / 'maps').glob('*.bt'))
 ICUAS26_1 = CONFIG_DIR.parent / 'maps' / 'icuas26_1.bt'
 TRUNK = (-3.0, 0.15)  # a tree trunk in icuas26_1
+
+
+def pillar_map(max_radius=0.5):
+    """No map grid, one pillar of radius 0.2 at (1, 0)."""
+    return ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, max_radius, [(1.0, 0.0, 0.2)])
 
 
 @pytest.mark.parametrize('path', MAPS, ids=lambda p: p.name)
@@ -95,3 +100,40 @@ def test_load_off_without_map_robots_or_collision():
     assert load(dict(sim, collision=False), [0.1]) is None
     assert load(dict(sim, map=None), [0.1]) is None
     assert load(sim, []) is None
+
+
+def test_pillar_clearance_is_exact_to_its_edge():
+    m = pillar_map()
+    assert m.clearance(1.5, 0.0) == pytest.approx(0.3)
+    assert m.clearance(1.0, -0.45) == pytest.approx(0.25)
+    assert m.clearance(1.0, 0.1) == 0.0  # inside
+    assert m.clearance(2.0, 0.0) == math.inf  # 0.8 m: beyond max_radius
+
+
+def test_clearance_is_the_nearer_of_map_and_pillar():
+    occupied = np.zeros((10, 2), bool)
+    occupied[:, 0] = True  # wall_map's wall, face at x = 1.0
+    m = ObstacleMap(occupied, 1.0, -0.5, 0.1, 0.5, [(0.3, 0.0, 0.1)])
+    assert m.clearance(0.62, 0.0) == pytest.approx(0.22)  # pillar edge at 0.4
+    assert m.clearance(0.88, 0.0) == pytest.approx(0.15)  # the wall, from the cell centre
+
+
+def test_move_stops_before_a_pillar_by_radius():
+    m = pillar_map()
+    x, y = m.move(0.0, 0.0, 2.0, 0.0, radius=0.3)
+    assert y == 0.0
+    assert 0.5 - PILLAR_RES / 2 <= x <= 0.5  # pillar edge at 0.8, minus the radius
+    assert m.move(0.0, 0.6, 2.0, 0.6, radius=0.3) == (2.0, 0.6)  # passes beside it
+
+
+def test_load_pillars_with_and_without_map():
+    pillars = [(1.0, 0.0, 0.2)]
+    sim = dict(config.SIM_DEFAULTS, map=None)
+    m = load(sim, [0.1], pillars)
+    assert m.clearance(1.0, 0.0) == 0.0 and m.res == PILLAR_RES
+    assert load(dict(sim, collision=False), [0.1], pillars) is None
+    assert load(sim, [], pillars) is None
+
+    both = load(dict(sim, map=str(ICUAS26_1)), [0.1], [(0.0, 0.0, 0.2)])
+    assert both.clearance(0.0, 0.0) == 0.0
+    assert both.clearance(*TRUNK) == 0.0

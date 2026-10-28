@@ -140,6 +140,18 @@ Visualization Manager:
         Value: /hero_sim/tether
       Value: true
     - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Obstacles
+      Namespaces:
+        obstacles: true
+      Topic:
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /hero_sim/obstacles
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: MarkerArray
       Namespaces:

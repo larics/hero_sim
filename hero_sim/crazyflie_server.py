@@ -34,7 +34,8 @@ class CrazyflieServer(Node):
         config_path = config.resolve_config(self.get_parameter('config_path').value)
         scenario = config.load(config_path)
         dt = 1.0 / scenario.sim['cf_rate']
-        obstacle_map = obstacles.load(scenario.sim, [cf.radius for cf in scenario.crazyflies])
+        obstacle_map = obstacles.load(scenario.sim, [cf.radius for cf in scenario.crazyflies],
+                                      scenario.obstacles)
 
         self.drones = {
             cf.name: SimCrazyflie(self, cf.name, (cf.x, cf.y, cf.z), dt=dt,
@@ -45,7 +46,7 @@ class CrazyflieServer(Node):
         if obstacle_map is not None:
             for cf in scenario.crazyflies:
                 if obstacle_map.clearance(cf.x, cf.y) < cf.radius:
-                    self.get_logger().warn(f'{cf.name} starts overlapping a map obstacle; '
+                    self.get_logger().warn(f'{cf.name} starts overlapping an obstacle; '
                                            'it can only move away from it')
 
         for srv_type, name, method in _BROADCASTS:
@@ -58,7 +59,7 @@ class CrazyflieServer(Node):
         collisions = 'off' if obstacle_map is None else 'on'
         self.get_logger().info(
             f'{len(self.drones)} crazyflies at {scenario.sim["cf_rate"]:g} Hz from {config_path}, '
-            f'map collisions {collisions}: {list(self.drones)}')
+            f'collisions {collisions}: {list(self.drones)}')
 
     def _update_all(self):
         transforms = [drone.update() for drone in self.drones.values()]

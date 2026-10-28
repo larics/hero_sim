@@ -1,17 +1,23 @@
-"""2D map collisions: keep robot footprints out of the octomap's obstacles. No ROS imports.
+"""2D collisions: keep footprints out of the map and the pillars. No ROS imports.
 
-The scenario's octomap (.bt) is flattened once at startup: every occupied
-voxel overlapping the height band sim.collision_z is an obstacle, seen from
-above. The default band leaves out the floor slab, ceilings and the tree
-canopies the drones perch in, and keeps trunks, posts and walls.
+Two kinds of obstacle, both in one ObstacleMap:
 
-Every robot is a disc of its footprint radius (config.FOOTPRINT_RADII). A move
-is checked along its straight path, so fast robots can't tunnel through thin
-obstacles, and stops at the last free point before the disc would touch one.
-Height is ignored: a drone is blocked by a trunk at any altitude.
+  map      the scenario's octomap (.bt), flattened once at startup: every
+           occupied voxel overlapping the height band sim.collision_z is an
+           obstacle, seen from above. The default band leaves out the floor
+           slab, ceilings and the tree canopies the drones perch in, and keeps
+           trunks, posts and walls.
+  pillars  the scenario's top-level obstacles: list, circles (x, y, radius)
+           kept exact rather than gridded.
 
-Lookups are O(1): ObstacleMap precomputes each cell's distance to the nearest
-obstacle, up to the largest radius it will be asked about.
+Every robot is a disc of its footprint radius (config.FOOTPRINT_RADII), and so
+is the tether object (hero_sim/tether.py). A move is checked along its
+straight path, so fast robots can't tunnel through thin obstacles, and stops at
+the last free point before the disc would touch one. Height is ignored: a
+drone is blocked by a trunk or a pillar at any altitude.
+
+Map lookups are O(1): ObstacleMap precomputes each cell's distance to the
+nearest map obstacle, up to the largest radius it will be asked about.
 """
 import math
 
@@ -21,6 +27,7 @@ from hero_sim import config
 
 _TREE_DEPTH = 16
 _KEY_ORIGIN = 1 << (_TREE_DEPTH - 1)  # octomap key of coordinate 0
+PILLAR_RES = 0.05  # m, cell size without a map; move() samples paths every half cell
 
 
 def read_bt(path):
@@ -72,12 +79,16 @@ def read_bt(path):
 
 
 class ObstacleMap:
-    """Obstacle cells on a 2D grid, with each cell's clearance to the nearest one."""
+    """Obstacle cells on a 2D grid plus circular pillars, with the clearance to the nearest one."""
 
-    def __init__(self, occupied, x0, y0, res, max_radius):
-        """occupied: bool array [row = y, col = x] with cell (0, 0) at (x0, y0)."""
+    def __init__(self, occupied, x0, y0, res, max_radius, circles=()):
+        """occupied: bool array [row = y, col = x] with cell (0, 0) at (x0, y0).
+
+        circles: pillars (x, y, radius), in m.
+        """
         self.res = res
         self.max_radius = max_radius
+        self.circles = tuple(tuple(float(v) for v in c) for c in circles)
         # Pad by the farthest reach so robots just outside the obstacles' extent are covered.
         n = math.ceil(max_radius / res + 0.5)
         self.x0, self.y0 = x0 - n * res, y0 - n * res
@@ -93,29 +104,33 @@ class ObstacleMap:
                 self._clearance[rows + n + di, cols + n + dj] = d
 
     @classmethod
-    def from_bt(cls, path, z_min, z_max, max_radius):
-        """Flatten the occupied voxels of a .bt that overlap z_min..z_max (m)."""
+    def from_bt(cls, path, z_min, z_max, max_radius, circles=()):
+        """Flatten the occupied voxels of a .bt that overlap z_min..z_max (m), plus `circles`."""
         res, boxes = read_bt(path)
         z_lo = (boxes[:, 2] - _KEY_ORIGIN) * res
         z_hi = z_lo + boxes[:, 3] * res
         # Extruded walls repeat the same footprint on every layer: keep one.
         boxes = np.unique(boxes[(z_hi > z_min) & (z_lo < z_max)][:, [0, 1, 3]], axis=0)
         if not len(boxes):
-            return cls(np.zeros((0, 0), bool), 0.0, 0.0, res, max_radius)
+            return cls(np.zeros((0, 0), bool), 0.0, 0.0, res, max_radius, circles)
         kx0, ky0 = boxes[:, :2].min(axis=0)
         kx1, ky1 = (boxes[:, :2] + boxes[:, 2:]).max(axis=0)
         occupied = np.zeros((ky1 - ky0, kx1 - kx0), bool)
         for kx, ky, size in boxes - (kx0, ky0, 0):
             occupied[ky:ky + size, kx:kx + size] = True
-        return cls(occupied, (kx0 - _KEY_ORIGIN) * res, (ky0 - _KEY_ORIGIN) * res, res, max_radius)
+        return cls(occupied, (kx0 - _KEY_ORIGIN) * res, (ky0 - _KEY_ORIGIN) * res, res,
+                   max_radius, circles)
 
     def clearance(self, x, y):
         """Distance (m) from (x, y) to the nearest obstacle; inf if beyond max_radius."""
+        best = math.inf
         row = math.floor((y - self.y0) / self.res)
         col = math.floor((x - self.x0) / self.res)
         if 0 <= row < self._clearance.shape[0] and 0 <= col < self._clearance.shape[1]:
-            return float(self._clearance[row, col])
-        return math.inf
+            best = float(self._clearance[row, col])
+        for cx, cy, r in self.circles:
+            best = min(best, max(math.hypot(x - cx, y - cy) - r, 0.0))
+        return best if best < self.max_radius else math.inf
 
     def move(self, x0, y0, x1, y1, radius):
         """Where a disc of `radius` moving straight from (x0, y0) to (x1, y1) ends up.
@@ -139,14 +154,18 @@ class ObstacleMap:
         return x1, y1
 
 
-def load(sim, radii):
+def load(sim, radii, pillars=()):
     """The scenario's ObstacleMap for robots of these radii, or None when there's nothing to check.
 
-    None when sim.collision is off, sim.map is null, or there are no robots.
+    pillars: the scenario's obstacles, (x, y, radius) each. None when
+    sim.collision is off, there are no robots, or neither a map nor pillars.
     """
     if not sim['collision'] or not radii:
         return None
     bt_file = config.resolve_map(sim['map'])
     if bt_file is None:
-        return None
-    return ObstacleMap.from_bt(bt_file, *sim['collision_z'], max_radius=max(radii))
+        if not pillars:
+            return None
+        return ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, max(radii), pillars)
+    return ObstacleMap.from_bt(bt_file, *sim['collision_z'], max_radius=max(radii),
+                               circles=pillars)

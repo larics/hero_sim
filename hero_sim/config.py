@@ -5,6 +5,7 @@ A scenario file has these sections (see config/example.yaml):
   ground_robots   kinematic ground robots, one entry per robot
   crazyflies      Crazyflies, named cf_1..cf_N in list order
   sim             optional overrides of SIM_DEFAULTS
+  obstacles       optional pillars (x, y, radius) that block robots and the tether object
   tether          optional winch, tether and object (hero_sim/tether.py)
 
 Unknown keys are rejected so typos fail loudly instead of being ignored.
@@ -26,7 +27,7 @@ SIM_DEFAULTS = {
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
-    'collision': True,           # stop robots at map obstacles (2D, see hero_sim/obstacles.py)
+    'collision': True,           # stop robots at the map and pillars (2D, hero_sim/obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
 }
 
@@ -92,7 +93,6 @@ class Tether:
     uav: str       # Crazyflie carrying the guide ring
     object: tuple  # x, y (m): start position on the floor
     goal: tuple    # x, y, radius (m)
-    obstacles: tuple = ()        # (x, y, radius) pillars (m) the object can't pass through
     object_size: float = 0.3     # m, cube edge
     slack: float = 0.5           # m of tether beyond taut at the start
     max_reel_speed: float = 0.5  # m/s, clamp on /winch/cmd_rate
@@ -109,6 +109,7 @@ class Scenario:
     crazyflies: tuple
     sim: dict
     tether: Tether = None
+    obstacles: tuple = ()  # (x, y, radius) pillars (m), see hero_sim/obstacles.py
 
 
 def load(path):
@@ -124,7 +125,7 @@ def load(path):
 def parse(raw):
     """Validate an already-loaded scenario mapping and return a Scenario."""
     raw = {} if raw is None else raw
-    _check_keys(raw, ('ground_robots', 'crazyflies', 'sim', 'tether'), 'top level')
+    _check_keys(raw, ('ground_robots', 'crazyflies', 'sim', 'obstacles', 'tether'), 'top level')
 
     ground = tuple(_ground_robot(i, r) for i, r in enumerate(_list(raw, 'ground_robots')))
     names = [r.name for r in ground]
@@ -157,8 +158,10 @@ def parse(raw):
         raise ValueError(f'sim.collision_z must be [z_min, z_max], z_min < z_max, got {band!r}')
     sim['collision_z'] = (float(band[0]), float(band[1]))
 
-    tether = _tether(raw['tether'], ground, cfs) if raw.get('tether') is not None else None
-    return Scenario(ground, cfs, sim, tether)
+    pillars = tuple(_pillar(i, o) for i, o in enumerate(_list(raw, 'obstacles')))
+    tether = (_tether(raw['tether'], ground, cfs, pillars)
+              if raw.get('tether') is not None else None)
+    return Scenario(ground, cfs, sim, tether, pillars)
 
 
 def attach_enabled(sim):
@@ -248,9 +251,20 @@ def _point(value, where, axes, **defaults):
     return tuple(float(value.get(a, defaults.get(a))) for a in axes)
 
 
-def _tether(entry, ground, cfs):
+def _pillar(i, entry):
+    where = f'obstacles[{i}]'
+    x, y, r = _point(entry, where, ('x', 'y', 'radius'))
+    if r <= 0.0:
+        raise ValueError(f'{where}.radius must be > 0, got {r}')
+    return x, y, r
+
+
+def _tether(entry, ground, cfs, pillars):
     where = 'tether'
-    _check_keys(entry, ('winch', 'ugv', 'uav', 'object', 'goal', 'obstacles', 'object_size',
+    if isinstance(entry, dict) and 'obstacles' in entry:
+        raise ValueError(f'{where}.obstacles moved to the top-level obstacles: list, '
+                         'which blocks the robots too')
+    _check_keys(entry, ('winch', 'ugv', 'uav', 'object', 'goal', 'object_size',
                         'slack', 'max_reel_speed'), where)
     ugv = entry.get('ugv', ground[0].name if ground else None)
     if ugv not in {r.name for r in ground}:
@@ -264,8 +278,6 @@ def _tether(entry, ground, cfs):
         uav=uav,
         object=_point(entry.get('object'), f'{where}.object', ('x', 'y')),
         goal=_point(entry.get('goal'), f'{where}.goal', ('x', 'y', 'radius'), radius=0.4),
-        obstacles=tuple(_point(o, f'{where}.obstacles[{i}]', ('x', 'y', 'radius'))
-                        for i, o in enumerate(_list(entry, 'obstacles'))),
         object_size=float(entry.get('object_size', Tether.object_size)),
         slack=float(entry.get('slack', Tether.slack)),
         max_reel_speed=float(entry.get('max_reel_speed', Tether.max_reel_speed)),
@@ -277,9 +289,7 @@ def _tether(entry, ground, cfs):
         raise ValueError(f'{where}.slack must be >= 0, got {tether.slack}')
     if tether.goal[2] <= 0.0:
         raise ValueError(f'{where}.goal.radius must be > 0, got {tether.goal[2]}')
-    for i, (x, y, r) in enumerate(tether.obstacles):
-        if r <= 0.0:
-            raise ValueError(f'{where}.obstacles[{i}].radius must be > 0, got {r}')
+    for i, (x, y, r) in enumerate(pillars):
         if math.hypot(tether.object[0] - x, tether.object[1] - y) < r + tether.object_radius:
             raise ValueError(f'{where}.object starts inside obstacles[{i}]')
     return tether

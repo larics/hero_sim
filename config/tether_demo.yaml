@@ -1,12 +1,14 @@
 # Tether demo: winch -> UGV pulley -> UAV ring -> object on the floor.
 # Get the object into the goal circle. It slides on the floor, never lifts,
-# and jams if pulled into the pillar: route it around.
+# and jams if pulled into the pillar: route it around. The pillar blocks the
+# robots too, the drone at any height.
 #
 #   bash start.sh tether_demo.yaml      # sim + RViz
 #
 # Controls: /herover_1/cmd_vel, /cf_1/takeoff|go_to|land, /winch/cmd_rate (m/s, + out, - in).
 # Feedback: /tether/object_pose, /tether/goal, /tether/taut, /tether/free_length,
-#           /tether/stuck, /tether/goal_reached, /winch/length. See README "Tether task".
+#           /tether/stuck, /tether/goal_reached, /winch/length, /hero_sim/obstacles.
+#           See README "Tether task".
 
 ground_robots:
   - name: herover_1
@@ -24,11 +26,12 @@ tether:
   object: {x: 0.5, y: -0.5}            # start on the floor
   object_size: 0.3                     # m, cube
   goal: {x: 2.5, y: 1.5, radius: 0.4}
-  obstacles:                           # pillars the object can't pass through
-    - {x: 1.5, y: 0.5, radius: 0.35}   # right on the straight line to the goal
   slack: 3.0                           # m of tether beyond taut at the start
   max_reel_speed: 0.5                  # m/s
 
+obstacles:                             # pillars: block the object and the robots
+  - {x: 1.5, y: 0.5, radius: 0.35}     # right on the straight line to the goal
+
 sim:
   map: null
-  collision: false
+  collision: true

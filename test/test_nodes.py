@@ -7,9 +7,9 @@ rclpy = pytest.importorskip('rclpy')
 pytest.importorskip('crazyflie_interfaces')
 
 from conftest import duration  # noqa: E402
-from crazyflie_interfaces.srv import Arm, Takeoff  # noqa: E402
+from crazyflie_interfaces.srv import Arm, GoTo, Takeoff  # noqa: E402
 from std_srvs.srv import Trigger  # noqa: E402
-from geometry_msgs.msg import PoseStamped, Twist  # noqa: E402
+from geometry_msgs.msg import Point, PoseStamped, Twist  # noqa: E402
 
 from hero_sim import config  # noqa: E402
 from hero_sim.kinematics import yaw_to_quat  # noqa: E402
@@ -136,16 +136,69 @@ def test_ground_robots_stop_at_map_obstacles(make, scenario_file):
     assert robot.x == pytest.approx(-3.3 - robot.radius - 0.1, abs=0.15)
 
 
-def test_robot_models_latched_and_frame_locked(make):
-    from rclpy.qos import DurabilityPolicy, QoSProfile
-    from visualization_msgs.msg import Marker, MarkerArray
-    from hero_sim.robot_models import TOPIC, RobotModels
+PILLAR_SCENARIO = """
+ground_robots:
+  - name: r
+    pose: {x: 0.0, y: 0.0}
+    radius: 0.3
+crazyflies:
+  - pose: {x: 0.0, y: 1.0, z: 1.0}
+obstacles:
+  - {x: 1.0, y: 0.0, radius: 0.2}
+  - {x: 1.0, y: 1.0, radius: 0.2}
+sim: {map: null, ground_rate: 10.0, cf_rate: 10.0}
+"""
 
-    publisher = make(RobotModels)  # publishes once, before anyone subscribes
+
+def test_ground_robots_stop_at_pillars(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(PILLAR_SCENARIO)
+    sim = make(GroundRobotSim)
+    robot = sim._robots[0]
+    sim._on_cmd_vel(robot, twist(vx=1.0))
+    for _ in range(20):  # 2 s at 1 m/s would carry it through the pillar
+        sim._tick()
+    assert 0.5 - 0.05 <= robot.x <= 0.5  # pillar edge at 0.8, minus the radius
+
+    sim._on_cmd_vel(robot, twist(vy=1.0))  # sideways past it is free
+    sim._tick()
+    assert robot.y == pytest.approx(0.1)
+
+
+def test_crazyflies_stop_at_pillars_at_any_height(make, scenario_file):
+    from hero_sim.crazyflie_server import CrazyflieServer
+    scenario_file(PILLAR_SCENARIO)
+    server = make(CrazyflieServer)
+    cf = server.drones['cf_1']
+    req = GoTo.Request(goal=Point(x=2.0, y=1.0, z=1.5), duration=duration(1))
+    cf._go_to_cb(req, GoTo.Response())
+    for _ in range(20):
+        server._update_all()
+    assert 0.7 - 0.05 <= cf.position[0] <= 0.7  # pillar edge at 0.8, minus 0.1
+    assert cf.position[2] == pytest.approx(1.5)  # height still goes through
+
+
+def test_collision_off_ignores_pillars(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(PILLAR_SCENARIO.replace('map: null', 'map: null, collision: false'))
+    sim = make(GroundRobotSim)
+    assert sim._obstacles is None
+    robot = sim._robots[0]
+    sim._on_cmd_vel(robot, twist(vx=1.0))
+    for _ in range(20):
+        sim._tick()
+    assert robot.x == pytest.approx(2.0)
+
+
+def _latched(make, topic, publisher_cls):
+    """The first MarkerArray a late TRANSIENT_LOCAL subscriber gets on `topic`."""
+    from rclpy.qos import DurabilityPolicy, QoSProfile
+    from visualization_msgs.msg import MarkerArray
+    publisher = make(publisher_cls)  # publishes once, before anyone subscribes
     got = []
     listener = make(lambda: rclpy.create_node('rviz_stand_in'))
     listener.create_subscription(
-        MarkerArray, TOPIC, got.append,
+        MarkerArray, topic, got.append,
         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(publisher)
@@ -155,9 +208,30 @@ def test_robot_models_latched_and_frame_locked(make):
         if got:
             break
     executor.shutdown()
-    assert got, 'late subscriber did not get the latched MarkerArray'
+    assert got, f'late subscriber did not get the latched MarkerArray on {topic}'
+    return got[0]
 
-    markers = got[0].markers
+
+def test_pillars_drawn_latched_even_with_collision_off(make, scenario_file):
+    from visualization_msgs.msg import Marker
+    from hero_sim.ground_robots import OBSTACLE_TOPIC, PILLAR_HEIGHT, GroundRobotSim
+
+    scenario_file(PILLAR_SCENARIO.replace('map: null', 'map: null, collision: false'))
+    markers = _latched(make, OBSTACLE_TOPIC, GroundRobotSim).markers
+    assert markers[0].action == Marker.DELETEALL
+    pillars = markers[1:]
+    assert [(m.ns, m.id, m.type, m.header.frame_id) for m in pillars] == [
+        ('obstacles', 0, Marker.CYLINDER, 'world'), ('obstacles', 1, Marker.CYLINDER, 'world')]
+    assert [(m.pose.position.x, m.pose.position.y) for m in pillars] == [(1.0, 0.0), (1.0, 1.0)]
+    assert all(m.scale.x == m.scale.y == pytest.approx(0.4) for m in pillars)
+    assert all(m.scale.z == PILLAR_HEIGHT for m in pillars)
+
+
+def test_robot_models_latched_and_frame_locked(make):
+    from visualization_msgs.msg import Marker
+    from hero_sim.robot_models import TOPIC, RobotModels
+
+    markers = _latched(make, TOPIC, RobotModels).markers
     # herover_1 has no model -> TF only; scout_1 and both CFs get meshes
     assert [(m.header.frame_id, m.ns) for m in markers] == [
         ('cf_1', 'crazyflie'), ('cf_2', 'crazyflie'), ('scout_1', 'scout')]
@@ -330,7 +404,7 @@ tether:
   goal: {x: 1.0, y: 0.0, radius: 0.3}
   slack: 0.0
   max_reel_speed: 1.0
-sim: {ground_rate: 10.0}
+sim: {ground_rate: 10.0, map: null}
 """
 
 
@@ -367,6 +441,25 @@ def test_tether_sim_reels_the_object_in(rclpy_context, scenario_file):
             node._tick()
         assert node._state.obj == pytest.approx((1.0, 0.0))  # under the UAV, never lifted
         assert node._reached
+    finally:
+        node.destroy_node()
+
+
+def test_tether_sim_object_jams_on_a_pillar(rclpy_context, scenario_file):
+    from std_msgs.msg import Float64
+    from hero_sim.tether_sim import TetherSim
+
+    # A pillar between the object (3, 0) and the point under the UAV (1, 0).
+    scenario_file(TETHER_SCENARIO + 'obstacles: [{x: 2.0, y: 0.0, radius: 0.2}]\n')
+    node = TetherSim()
+    try:
+        node._on_ugv(pose_msg(-1.0, 0.0, 0.0))
+        node._on_uav(pose_msg(1.0, 0.0, 1.0))
+        node._on_rate(Float64(data=-1.0))
+        for _ in range(30):
+            node._tick()
+        assert node._state.stuck and not node._reached
+        assert 2.3 <= node._state.obj[0] <= 2.35  # pillar 0.2 + object 0.1
     finally:
         node.destroy_node()
 

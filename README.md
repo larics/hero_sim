@@ -115,9 +115,14 @@ Ground robots hold the last `cmd_vel` until a new one arrives. Poses are publish
 
 As on hardware, where the mocap markers sit on top of the robot, a ground robot's pose is at its marker height rather than on the floor: the top of the deck, scout 0.227 m and herover 0.095 m (0 without a model). Docks the control stack places on a robot are relative to this height. To change it, set `pose: {z: ...}`; the RViz model stays on the floor.
 
-## Map collisions
+## Obstacles
 
-Robots can't drive or fly into the map. The octomap's voxels between 0.2 m and 2.0 m high (`sim.collision_z`) are flattened into a 2D obstacle grid, which keeps the trunks and posts and leaves out the floor, ceilings and tree canopies. Each robot is a circle of its `radius`, and a move stops where that circle would touch an obstacle. The robot moves again as soon as it's commanded away. Height changes always go through, so a drone blocked by a trunk can still climb or land, but it can't fly over the trunk.
+Robots can't drive or fly into obstacles. There are two kinds, and both block in 2D:
+
+- **The map.** The octomap's voxels between 0.2 m and 2.0 m high (`sim.collision_z`) are flattened into a 2D obstacle grid, which keeps the trunks and posts and leaves out the floor, ceilings and tree canopies.
+- **Pillars.** Circles listed under a top-level `obstacles:` key. They work with or without a map (`map: null`).
+
+Each robot is a circle of its `radius`, and a move stops where that circle would touch an obstacle. The robot moves again as soon as it's commanded away. Height changes always go through, so a drone blocked by a trunk or a pillar can still climb or land, but it can't fly over it.
 
 ```yaml
 ground_robots:
@@ -126,11 +131,19 @@ ground_robots:
     radius: 0.45                        # or set it
 crazyflies:
   - pose: {x: 1.5, y: 0.5, z: 0.03}     # radius 0.1 by default
+obstacles:                              # optional pillars, m
+  - {x: 1.5, y: 0.5, radius: 0.35}
 sim:
-  collision: false                      # turn it off
+  collision: false                      # turn all of it off: map, pillars, tether object
 ```
 
 Every motion command is checked, including `go_to`, `cmd_hover`, `cmd_position` and the dock ride-along. `/<cf>/set_position` is a teleport and isn't checked. A robot that starts inside an obstacle gets a warning at launch and can move out but not further in.
+
+Pillars are drawn in RViz as 2 m columns and published latched on `/hero_sim/obstacles` (`visualization_msgs/MarkerArray`), even with collisions off. Each pillar is a `CYLINDER` marker at its `x`, `y`, with `scale.x` its diameter:
+
+```bash
+ros2 topic echo --once /hero_sim/obstacles
+```
 
 ## Tether task
 
@@ -148,8 +161,6 @@ tether:
   object: {x: 0.5, y: -0.5}              # start, on the floor
   object_size: 0.3                       # m, cube edge (default 0.3)
   goal: {x: 2.5, y: 1.5, radius: 0.4}    # radius defaults to 0.4
-  obstacles:                             # optional pillars
-    - {x: 1.5, y: 0.5, radius: 0.35}
   slack: 3.0                             # m of tether beyond taut at the start (default 0.5)
   max_reel_speed: 0.5                    # m/s (default 0.5)
 ```
@@ -159,8 +170,8 @@ The winch pays out a length L. What the two pulleys don't use is the free tether
 - While the tether is slack, the object stays where it is.
 - Once it's taut, the object slides along the floor straight toward the point under the UAV.
 - The object is never lifted. Once it is under the UAV, the winch slips instead.
-- Pulled into a pillar, the object jams where it touches it and the winch slips. A pull away from the pillar frees it.
-- The robots never feel the tether: moving them only drags the object or makes the winch slip. The tether and the robots pass through pillars, and the object ignores the map's obstacles; only pillars block the object.
+- Pulled into an obstacle, a pillar or the map, the object jams where it touches it and the winch slips. A pull away from the obstacle frees it. The object is a circle of half its `object_size`, and like the robots it only collides while `sim.collision` is on (see [Obstacles](#obstacles)).
+- The robots never feel the tether: moving them only drags the object or makes the winch slip. The robots stop at the same obstacles as the object, but the tether line itself passes through them.
 
 Drive the UGV with `/<ugv>/cmd_vel` and fly the UAV with its Crazyflie services, as in [Driving the robots](#driving-the-robots). The winch and the object:
 
@@ -170,7 +181,7 @@ Drive the UGV with `/<ugv>/cmd_vel` and fly the UAV with its Crazyflie services,
 | `/winch/length` | `std_msgs/Float64` | L |
 | `/tether/free_length` | `std_msgs/Float64` | l |
 | `/tether/taut` | `std_msgs/Bool` | |
-| `/tether/stuck` | `std_msgs/Bool` | object jammed against a pillar |
+| `/tether/stuck` | `std_msgs/Bool` | object jammed against an obstacle |
 | `/tether/object_pose` | `geometry_msgs/PoseStamped` | object center |
 | `/tether/goal` | `geometry_msgs/PoseStamped` | goal center, latched |
 | `/tether/goal_reached` | `std_msgs/Bool` | object center inside the goal circle |

@@ -2,6 +2,8 @@
 
 sim.launch.py starts this node only when the scenario has a tether: section.
 It follows the UGV's and UAV's /pose and steps the model at sim.ground_rate.
+With sim.collision on, the object stops at the scenario's pillars and map
+obstacles (hero_sim/obstacles.py); ground_robot_sim draws the pillars.
 
 Topics:
   /winch/cmd_rate       std_msgs/Float64  in, m/s: + pays out, - reels in. Held until
@@ -22,11 +24,10 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, Float64
 from visualization_msgs.msg import Marker, MarkerArray
 
-from hero_sim import config, tether
+from hero_sim import config, obstacles, tether
 
 FRAME = 'world'
 MARKER_TOPIC = '/hero_sim/tether'
-OBSTACLE_HEIGHT = 0.6  # m, drawn only: the tether passes over obstacles
 
 
 def _color(m, r, g, b, a=1.0):
@@ -43,7 +44,7 @@ class TetherSim(Node):
             raise RuntimeError('scenario has no tether: section')
         t = self._t = scenario.tether
         self._dt = 1.0 / scenario.sim['ground_rate']
-        # Winch and pillars never change: resend them once a second, not every tick.
+        # The winch never changes: resend it once a second, not every tick.
         self._static_every = max(1, round(scenario.sim['ground_rate']))
         self._ticks = 0
 
@@ -53,6 +54,11 @@ class TetherSim(Node):
         self._reached = False
         self._rate = 0.0
         self._ugv = self._uav = None
+        self._obstacles = obstacles.load(scenario.sim, [t.object_radius], scenario.obstacles)
+        if (self._obstacles is not None
+                and self._obstacles.clearance(*t.object) < t.object_radius):
+            self.get_logger().warn('the object starts overlapping an obstacle; '
+                                   'it can only be pulled away from it')
 
         self.create_subscription(PoseStamped, f'/{t.ugv}/pose', self._on_ugv, 10)
         self.create_subscription(PoseStamped, f'/{t.uav}/pose', self._on_uav, 10)
@@ -72,9 +78,10 @@ class TetherSim(Node):
         self.create_publisher(PoseStamped, '/tether/goal', latched).publish(goal)
 
         self.create_timer(self._dt, self._tick)
+        collisions = 'off' if self._obstacles is None else 'on'
         self.get_logger().info(
             f'tether: winch {t.winch[:2]} -> {t.ugv} -> {t.uav} -> object {t.object}, '
-            f'goal {t.goal[:2]} r={t.goal[2]:g}, {len(t.obstacles)} obstacle(s); '
+            f'goal {t.goal[:2]} r={t.goal[2]:g}, collisions {collisions}; '
             f'waiting for {t.ugv} and {t.uav} poses')
 
     def _on_ugv(self, msg):
@@ -110,7 +117,7 @@ class TetherSim(Node):
         was_stuck = self._state is not None and self._state.stuck
         s = self._state = tether.step(
             max(self._length + self._rate * self._dt, 0.0), t.winch, self._ugv, self._uav,
-            obj, self._attach_z, t.obstacles, t.object_radius)
+            obj, self._attach_z, self._obstacles, t.object_radius)
         self._length = s.length
         if s.stuck and not was_stuck:
             self.get_logger().info('object jammed against an obstacle')
@@ -153,20 +160,11 @@ class TetherSim(Node):
         drum = self._marker('winch', 1, Marker.CYLINDER, wx, wy, wz)
         drum.scale.x, drum.scale.y, drum.scale.z = 0.3, 0.3, 0.12
         _color(drum, 0.91, 0.35, 0.05)
-
-        pillars = []
-        for i, (x, y, r) in enumerate(t.obstacles):
-            m = self._marker('obstacles', i, Marker.CYLINDER, x, y, OBSTACLE_HEIGHT / 2.0)
-            m.scale.x = m.scale.y = 2.0 * r
-            m.scale.z = OBSTACLE_HEIGHT
-            _color(m, 0.55, 0.45, 0.4)
-            pillars.append(m)
-        return [base, drum, *pillars]
+        return [base, drum]
 
     def _dynamic_markers(self):
         t = self._t
         s = self._state
-        wx, wy, wz = t.winch
         gx, gy, gr = t.goal
         ox, oy = s.obj
         size = t.object_size
@@ -179,13 +177,6 @@ class TetherSim(Node):
             _color(line, 0.91, 0.35, 0.05)
         else:
             _color(line, 0.98, 0.7, 0.45, 0.8)
-
-        pulleys = []
-        for i, p in enumerate((self._ugv, self._uav)):
-            m = self._marker('pulleys', i, Marker.SPHERE, *p)
-            m.scale.x = m.scale.y = m.scale.z = 0.08
-            _color(m, 1.0, 1.0, 1.0)
-            pulleys.append(m)
 
         box = self._marker('object', 0, Marker.CUBE, ox, oy, size / 2.0)
         box.scale.x = box.scale.y = box.scale.z = size
@@ -203,16 +194,7 @@ class TetherSim(Node):
         label.text = 'GOAL REACHED!' if self._reached else 'GOAL'
         _color(label, 0.4, 0.9, 0.45)
 
-        status = self._marker('status', 0, Marker.TEXT_VIEW_FACING, wx, wy, wz + 0.5)
-        status.scale.z = 0.18
-        state = 'STUCK' if s.stuck else 'TAUT' if s.taut else 'slack'
-        status.text = f'L = {s.length:.2f} m   l = {s.free:.2f} m   {state}'
-        if s.stuck:
-            _color(status, 1.0, 0.4, 0.4)
-        else:
-            _color(status, 1.0, 1.0, 1.0)
-
-        return [line, *pulleys, box, goal, label, status]
+        return [line, box, goal, label]
 
 
 def main(args=None):

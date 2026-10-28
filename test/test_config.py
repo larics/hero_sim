@@ -79,6 +79,12 @@ def test_crazyflie_gripper_is_optional():
     assert [cf.gripper for cf in s.crazyflies] == [True, False]
 
 
+def test_obstacles_are_optional_and_parsed():
+    assert parse('{}').obstacles == ()
+    s = parse('obstacles: [{x: 1, y: 2, radius: 0.5}, {x: -1, y: 0, radius: 0.1}]')
+    assert s.obstacles == ((1.0, 2.0, 0.5), (-1.0, 0.0, 0.1))
+
+
 def test_drive_is_case_insensitive():
     s = parse('ground_robots: [{name: h, drive: DIFF}]')
     assert s.ground_robots[0].drive == 'diff'
@@ -105,6 +111,12 @@ def test_drive_is_case_insensitive():
     ('sim: {collision_z: [2.0, 1.0]}', r'collision_z must be \[z_min, z_max\]'),
     ('ground_robots: [{name: a, radius: -1}]', r'\(a\): radius must be >= 0'),
     ('crazyflies: [{radius: -0.1}]', r'\(cf_1\): radius must be >= 0'),
+    ('obstacles: {x: 0}', 'obstacles must be a list'),
+    ('obstacles: [{x: 0, y: 0}]', r"obstacles\[0\]: missing \['radius'\]"),
+    ('obstacles: [[0, 0, 1]]', r'obstacles\[0\] must be a mapping'),
+    ('obstacles: [{x: 0, y: 0, radius: 1, z: 2}]', r"obstacles\[0\]: unknown key.*'z'"),
+    ('obstacles: [{x: 0, y: 0, radius: 1}, {x: 0, y: 0, radius: 0}]',
+     r'obstacles\[1\].radius must be > 0'),
 ])
 def test_rejects_bad_config(text, match):
     with pytest.raises(ValueError, match=match):
@@ -174,15 +186,13 @@ def test_tether_defaults():
     assert t.winch == (-1.0, 0.0, 0.3)
     assert t.object == (1.0, 2.0)
     assert t.goal == (3.0, 4.0, 0.4)
-    assert t.obstacles == ()
     assert (t.object_size, t.object_radius, t.slack, t.max_reel_speed) == (0.3, 0.15, 0.5, 0.5)
 
 
 def test_tether_overrides():
-    t = parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}, ugv: g2, uav: cf_2, object_size: 0.2, '
-                              'obstacles: [{x: 2, y: 2, radius: 0.5}]}').tether
+    t = parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}, ugv: g2, uav: cf_2, '
+                              'object_size: 0.2}').tether
     assert (t.ugv, t.uav, t.object_radius) == ('g2', 'cf_2', 0.1)
-    assert t.obstacles == ((2.0, 2.0, 0.5),)
 
 
 @pytest.mark.parametrize('extra, match', [
@@ -192,10 +202,7 @@ def test_tether_overrides():
     (', goal: {x: 3, y: 4, z: 0}', r"tether.goal: unknown key.*'z'"),
     (', goal: {x: 3, y: 4, radius: 0}', 'tether.goal.radius must be > 0'),
     (', object: {x: 1}', r"tether.object: missing \['y'\]"),
-    (', obstacles: [{x: 0, y: 0}]', r"tether.obstacles\[0\]: missing \['radius'\]"),
-    (', obstacles: [[0, 0, 1]]', r'tether.obstacles\[0\] must be a mapping'),
-    (', obstacles: [{x: 0, y: 0, radius: 0}]', r'tether.obstacles\[0\].radius must be > 0'),
-    (', obstacles: [{x: 1.3, y: 2, radius: 0.2}]', r'tether.object starts inside obstacles\[0\]'),
+    (', obstacles: [{x: 0, y: 0, radius: 1}]', 'tether.obstacles moved to the top-level'),
     (', object_size: 0', 'tether.object_size must be > 0'),
     (', max_reel_speed: -1', 'tether.max_reel_speed must be > 0'),
     (', slack: -1', 'tether.slack must be >= 0'),
@@ -203,6 +210,14 @@ def test_tether_overrides():
 def test_rejects_bad_tether(extra, match):
     with pytest.raises(ValueError, match=match):
         parse(TETHER_ROBOTS + f'tether: {TETHER_MIN}{extra}}}')
+
+
+def test_tether_object_must_start_clear_of_pillars():
+    clear = TETHER_ROBOTS + 'obstacles: [{x: 1.4, y: 2, radius: 0.2}]\n'
+    assert parse(clear + f'tether: {TETHER_MIN}}}').obstacles == ((1.4, 2.0, 0.2),)
+    inside = TETHER_ROBOTS + 'obstacles: [{x: 0, y: 0, radius: 0.1}, {x: 1.3, y: 2, radius: 0.2}]'
+    with pytest.raises(ValueError, match=r'tether.object starts inside obstacles\[1\]'):
+        parse(inside + f'\ntether: {TETHER_MIN}}}')
 
 
 @pytest.mark.parametrize('text, match', [

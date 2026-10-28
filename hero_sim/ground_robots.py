@@ -5,19 +5,25 @@ linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
 published in 'world' at the robot's pose z (its marker height, see
 config.MARKER_HEIGHTS), along with a world -> <name> transform.
 
-With a map and sim.collision on, a robot stops where its footprint would hit
-an obstacle (hero_sim/obstacles.py) and resumes when cmd_vel points away.
+With sim.collision on, a robot stops where its footprint would hit the map or
+a pillar (hero_sim/obstacles.py) and resumes when cmd_vel points away.
+
+This node also draws the scenario's pillars (its obstacles: list), latched on
+/hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter.
 """
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import TransformBroadcaster
+from visualization_msgs.msg import Marker, MarkerArray
 
 from hero_sim import config, obstacles
 from hero_sim.kinematics import integrate_ground, limit_ground_cmd, yaw_to_quat
 
 FRAME = 'world'
+OBSTACLE_TOPIC = '/hero_sim/obstacles'
+PILLAR_HEIGHT = 2.0  # m, drawn only: pillars block at any height
 
 
 class _Robot:
@@ -53,12 +59,14 @@ class GroundRobotSim(Node):
                                      lambda msg, r=robot: self._on_cmd_vel(r, msg), qos)
             self._robots.append(robot)
 
-        self._obstacles = obstacles.load(sim, [r.radius for r in self._robots])
+        self._obstacles = obstacles.load(sim, [r.radius for r in self._robots],
+                                         scenario.obstacles)
         if self._obstacles is not None:
             for r in self._robots:
                 if self._obstacles.clearance(r.x, r.y) < r.radius:
-                    self.get_logger().warn(f'{r.name} starts overlapping a map obstacle; '
+                    self.get_logger().warn(f'{r.name} starts overlapping an obstacle; '
                                            'it can only move away from it')
+        self._publish_pillars(scenario.obstacles)
 
         self._tf = TransformBroadcaster(self)
         self.create_timer(self._dt, self._tick)
@@ -67,7 +75,31 @@ class GroundRobotSim(Node):
         collisions = 'off' if self._obstacles is None else 'on'
         self.get_logger().info(
             f'ground robots at {sim["ground_rate"]:g} Hz, max {self._max_speed:g} m/s, '
-            f'{self._max_yaw_rate:g} rad/s, map collisions {collisions}: {summary}')
+            f'{self._max_yaw_rate:g} rad/s, collisions {collisions}, '
+            f'{len(scenario.obstacles)} pillar(s): {summary}')
+
+    def _publish_pillars(self, pillars):
+        latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._pillar_pub = self.create_publisher(MarkerArray, OBSTACLE_TOPIC, latched)
+        clear = Marker()
+        clear.header.frame_id = FRAME
+        clear.action = Marker.DELETEALL
+        markers = [clear]
+        for i, (x, y, radius) in enumerate(pillars):
+            m = Marker()
+            m.header.frame_id = FRAME
+            m.ns = 'obstacles'
+            m.id = i
+            m.type = Marker.CYLINDER
+            m.action = Marker.ADD
+            m.pose.position.x, m.pose.position.y, m.pose.position.z = x, y, PILLAR_HEIGHT / 2.0
+            m.pose.orientation.w = 1.0
+            m.scale.x = m.scale.y = 2.0 * radius
+            m.scale.z = PILLAR_HEIGHT
+            m.color.r, m.color.g, m.color.b, m.color.a = 0.55, 0.45, 0.4, 1.0
+            markers.append(m)
+        self._pillar_pub.publish(MarkerArray(markers=markers))
 
     def _on_cmd_vel(self, robot, msg):
         robot.vx, robot.vy, robot.wz = limit_ground_cmd(

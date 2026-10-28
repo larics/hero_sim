@@ -17,9 +17,10 @@ Quasi-static (no swing), and the robots never feel the tether:
           until |A - O| = l.
   lifted  never: the object is too heavy, so once it sits under the UAV the
           winch slips (pays out) instead.
-  jammed  pulled into a pillar, the object stops where it touches it and the
-          winch slips, until a pull away from the pillar frees it. The
-          tether itself passes over pillars, and the robots through them.
+  jammed  pulled into an obstacle (a pillar or the map, hero_sim/obstacles.py),
+          the object stops where it touches it and the winch slips, until a
+          pull away from the obstacle frees it. The robots stop at the same
+          obstacles; the tether line itself passes through them.
 
 The node in hero_sim/tether_sim.py runs this for the scenario's tether: section.
 """
@@ -32,7 +33,7 @@ class State(NamedTuple):
     obj: tuple     # x, y (m) of the object on the floor
     free: float    # m, tether from the UAV ring to the object
     taut: bool
-    stuck: bool    # jammed against a pillar
+    stuck: bool    # jammed against an obstacle
 
 
 def initial_length(winch, ugv, uav, obj, attach_z, slack):
@@ -46,41 +47,13 @@ def reached(obj, goal):
     return math.hypot(obj[0] - goal[0], obj[1] - goal[1]) <= goal[2]
 
 
-def first_contact(p, q, obstacles, radius):
-    """Where an object of `radius` moving straight from p to q first touches an
-    obstacle (x, y, r), or None if the move is clear. Moving away from an
-    obstacle it already touches is clear."""
-    dx, dy = q[0] - p[0], q[1] - p[1]
-    a = dx * dx + dy * dy
-    if a == 0.0:
-        return None
-    best = None
-    for cx, cy, r in obstacles:
-        r += radius
-        px, py = p[0] - cx, p[1] - cy
-        b = dx * px + dy * py  # < 0: heading toward the center
-        if px * px + py * py <= r * r + 1e-9:
-            if b < 0.0:
-                return tuple(p)  # touching it and pushed in: jammed
-            continue
-        c = px * px + py * py - r * r
-        disc = b * b - a * c
-        if b >= 0.0 or disc < 0.0:
-            continue
-        t = (-b - math.sqrt(disc)) / a
-        if t <= 1.0 and (best is None or t < best):
-            best = t
-    if best is None:
-        return None
-    return p[0] + best * dx, p[1] + best * dy
-
-
-def step(length, winch, ugv, uav, obj, attach_z, obstacles=(), radius=0.0):
+def step(length, winch, ugv, uav, obj, attach_z, obstacles=None, radius=0.0):
     """One quasi-static update of the tether and the object. Returns a State.
 
     length: tether paid out by the winch (m). winch, ugv, uav: (x, y, z) the
     tether runs through, in order. obj: object (x, y) on the floor, tied at
-    height attach_z, with footprint `radius` against obstacles (x, y, r).
+    height attach_z, with footprint `radius` against `obstacles`, an
+    obstacles.ObstacleMap or None for none.
     """
     routed = math.dist(winch, ugv) + math.dist(ugv, uav)
     dz = max(uav[2] - attach_z, 0.0)
@@ -94,8 +67,10 @@ def step(length, winch, ugv, uav, obj, attach_z, obstacles=(), radius=0.0):
         return State(length, tuple(obj), free, h > reach - 1e-3, False)
     # Taut: slide toward the point under the UAV.
     target = (uav[0] + dx * reach / h, uav[1] + dy * reach / h)
-    contact = first_contact(obj, target, obstacles, radius)
-    if contact is None:
+    if obstacles is None:
+        return State(length, target, free, True, False)
+    contact = obstacles.move(obj[0], obj[1], target[0], target[1], radius)
+    if contact == target:
         return State(length, target, free, True, False)
     # Jammed against an obstacle: the object stops there and the winch slips.
     free = math.dist(uav, (*contact, attach_z))
