@@ -19,6 +19,10 @@ class SimCrazyflie:
       low-level        cmd_position / cmd_full_state / cmd_velocity_world /
                        cmd_vel_legacy, active for LOW_LEVEL_TIMEOUT after the last msg
       high-level       takeoff / land / go_to, linear interpolation over the duration
+
+    With an ObstacleMap (hero_sim/obstacles.py), every source's horizontal
+    motion stops where the footprint of `radius` would hit an obstacle; height
+    changes always go through. set_position teleports without a check.
     """
 
     # Supervisor info bits (crazyflie_interfaces/msg/Status)
@@ -36,15 +40,18 @@ class SimCrazyflie:
     BATTERY_LOW = 3.3        # V, below this pm_state reports LOW_POWER
 
     def __init__(self, node: Node, name, initial_position=(0.0, 0.0, 0.0), dt=0.1,
-                 battery_drain=0.025, frame='world'):
+                 battery_drain=0.025, frame='world', radius=0.1, obstacles=None):
         self.node = node
         self.name = name
         self.frame = frame
         self.dt = dt
         self.battery_drain = battery_drain  # V/s while flying
+        self.radius = radius  # m, footprint checked against `obstacles`
+        self.obstacles = obstacles  # ObstacleMap, or None for no map collisions
 
         self.position = np.array(initial_position, dtype=float)
         self.yaw = 0.0
+        self._checked_xy = tuple(self.position[:2])  # x, y the obstacle check last let through
 
         # High-level motion (linear interpolation start -> goal)
         self.start_position = self.position.copy()
@@ -120,6 +127,7 @@ class SimCrazyflie:
             pass  # position already set by the low-level callbacks
         elif self.motion_active:
             self._update_high_level(dt)
+        self._keep_clear()
 
         if self.flying:
             self.battery_voltage = max(self.battery_voltage - self.battery_drain * dt,
@@ -152,6 +160,15 @@ class SimCrazyflie:
             self.motion_active = False
             if self.position[2] < 0.05:
                 self.flying = False
+
+    def _keep_clear(self):
+        """Stop x, y where the straight path from the last checked point meets an obstacle."""
+        if self.obstacles is None:
+            return
+        x, y = self.obstacles.move(*self._checked_xy, self.position[0], self.position[1],
+                                   self.radius)
+        self.position[0], self.position[1] = x, y
+        self._checked_xy = (x, y)
 
     def _publish_pose(self):
         stamp = self.node.get_clock().now().to_msg()
@@ -280,6 +297,7 @@ class SimCrazyflie:
     def _set_position_cb(self, request, response):
         self.position = np.array([request.goal.x, request.goal.y, request.goal.z])
         self.yaw = request.yaw
+        self._checked_xy = (request.goal.x, request.goal.y)  # a teleport skips the path check
         self.goal = self.position.copy()
         self.start_position = self.position.copy()
         self.motion_active = False
@@ -290,6 +308,7 @@ class SimCrazyflie:
     # ------------------------------------------------------------ cmd topics
 
     def _mark_low_level(self):
+        self._keep_clear()
         self.goal = self.position.copy()
         self.motion_active = False
         self.last_low_level_time = self.node.get_clock().now()

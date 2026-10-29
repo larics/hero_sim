@@ -3,10 +3,19 @@
 
 # Kinematic ground robots. Each one subscribes to /<name>/cmd_vel (body-frame
 # Twist, held until the next message) and publishes /<name>/pose plus TF
-# world -> <name> at z = 0.
+# world -> <name> at the pose's z.
+#   pose: {z: 0.227}   height (m) of the published pose: where the mocap markers sit on
+#                  the real robot. Default by model, the top of its deck: scout 0.227,
+#                  herover 0.095, no model 0. The mesh stays on the floor either way
 #   drive: omni    holonomic, honors linear.x, linear.y and angular.z (default)
 #   drive: diff    non-holonomic, linear.y is ignored
 #   model: scout | herover   RViz mesh drawn on the robot's frame; leave out for TF axes only
+#   radius: 0.42   footprint (m) kept out of the map, pillars and other ground robots
+#                  (sim.collision). Default by model: scout 0.42, herover 0.17, no
+#                  model 0.3. 0 ignores them
+# Each one also serves /<name>/go_to (crazyflie_interfaces/srv/GoTo, like the
+# Crazyflies): drives to goal x, y and yaw in `duration`, slower if the speed
+# limits below need it. Any cmd_vel message cancels it.
 ground_robots:
   - name: scout_1
     pose: {x: 0.0, y: 0.0, yaw: 0.0}   # m, m, rad
@@ -22,6 +31,7 @@ ground_robots:
 #   gripper: true   starts with an open two-claw gripper on top, drawn in RViz
 #                   (default false). Needs sim_attach (see attach below), which
 #                   shuts it on a branch lock and serves /sim/<cf>/add_gripper.
+#   radius: 0.1     footprint (m) kept out of the map and pillars (default 0.1)
 crazyflies:
   - pose: {x: 1.5, y:  0.5, z: 0.03}   # cf_1
     gripper: true
@@ -30,12 +40,40 @@ crazyflies:
 # Optional. Leave out any key to keep its default.
 sim:
   ground_rate: 50.0          # Hz, ground robot integration + /pose rate
-  ground_max_speed: 2.0      # m/s, clamp on |(linear.x, linear.y)|
-  ground_max_yaw_rate: 2.0   # rad/s, clamp on |angular.z|
+  ground_max_speed: 2.0      # m/s, clamp on |(linear.x, linear.y)| and go_to speed
+  ground_max_yaw_rate: 2.0   # rad/s, clamp on |angular.z| and go_to turns
   cf_rate: 10.0              # Hz, Crazyflie update + /pose rate
   cf_battery_drain: 0.025    # V/s while flying (starts 4.2 V, floors at 3.0 V)
   attach: auto               # sim_attach (/sim/attach_agent dock ride-along): auto runs it
                              # only if hero_mrs_msgs is installed; true | false to force
   rviz: true                 # RViz with config/sim.rviz
   models: true               # robot meshes in RViz (crazyflies, and ground robots with a model)
-  map: icuas26_1             # octomap: maps/<name>.bt, a path to a .bt, or null for none
+  # map: icuas26_1           # octomap: maps/<name>.bt, a path to a .bt, or null for none.
+                             # Default icuas26_1; not together with obstacles: (below)
+  collision: true            # robots and the tether object stop where their footprint
+                             # would hit a map obstacle or a pillar (obstacles: below);
+                             # ground robots also stop at each other
+  collision_z: [0.2, 2.0]    # m, map heights that count as obstacles, flattened to 2D:
+                             # trunks and posts, not the floor, ceiling or tree canopies
+
+# Optional pillars (m): circles that block the robots (drones at any height)
+# and the tether object while sim.collision is on. They are the scenario's
+# map: no sim.map with them (setting both is an error), and RViz shows them
+# as an octomap like a .bt map's. Also drawn as cylinders and published
+# latched on /hero_sim/obstacles.
+#   height: 2.0   how tall it is in RViz and the octomap (default 2.0); collisions ignore it
+obstacles:
+  - {x: 1.5, y: 1.5, radius: 0.35, height: 2.0}
+
+# Optional: a winch drags an object across the floor with a tether through a
+# pulley on a ground robot and a ring on a Crazyflie (README "Tether task",
+# config/tether/tether_demo.yaml). Leave it out and nothing extra runs.
+# tether:
+#   winch: {x: -3.0, y: 0.0, z: 0.3}    # m, x and y required; z: where the tether leaves the drum
+#   ugv: scout_1                         # pulley on its deck (default: the first ground robot)
+#   uav: cf_1                            # ring (default cf_1)
+#   object: {x: 0.5, y: -0.5}            # required, start on the floor
+#   object_size: 0.3                     # m, cube edge; half of it is its footprint against obstacles
+#   goal: {x: 2.5, y: 1.5, radius: 0.4}  # x and y required
+#   slack: 0.5                           # m of tether beyond taut at the start
+#   max_reel_speed: 0.5                  # m/s, clamp on /winch/cmd_rate

@@ -2,29 +2,54 @@
 
 cmd_vel is a body-frame Twist held until the next message. omni robots honor
 linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
-published in 'world' at z=0, along with a world -> <name> transform.
+published in 'world' at the robot's pose z (its marker height, see
+config.MARKER_HEIGHTS), along with a world -> <name> transform.
+
+/<name>/go_to (crazyflie_interfaces/srv/GoTo, as for the Crazyflies) drives
+to goal x, y and yaw in `duration`, or slower to stay within the speed limits
+(kinematics.GroundGoTo). relative makes x, y an offset in the world frame;
+goal.z and group_mask are ignored. Any cmd_vel message cancels it.
+
+With sim.collision on, a robot stops where its footprint would hit the map, a
+pillar or another ground robot (hero_sim/obstacles.py), and resumes when
+cmd_vel points away. A blocked go_to waits where it stopped and carries on
+once the way is clear. The robots move one after another each tick, each
+against the others' current positions, so they never end up overlapping.
+
+This node also draws the scenario's pillars (its obstacles: list), latched on
+/hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter,
+scale.z = height. (octomap.launch.py serves them as an octomap too.)
 """
+import math
+
+from crazyflie_interfaces.srv import GoTo
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from tf2_ros import TransformBroadcaster
+from visualization_msgs.msg import Marker, MarkerArray
 
-from hero_sim import config
-from hero_sim.kinematics import integrate_ground, limit_ground_cmd, yaw_to_quat
+from hero_sim import config, obstacles
+from hero_sim.kinematics import GroundGoTo, integrate_ground, limit_ground_cmd, yaw_to_quat
 
 FRAME = 'world'
+OBSTACLE_TOPIC = '/hero_sim/obstacles'
 
 
 class _Robot:
-    __slots__ = ('name', 'drive', 'x', 'y', 'yaw', 'vx', 'vy', 'wz', 'pose_pub')
+    __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'z', 'yaw', 'vx', 'vy', 'wz', 'pose_pub',
+                 'go_to', 'go_to_t')
 
     def __init__(self, spec, pose_pub):
         self.name = spec.name
         self.drive = spec.drive
-        self.x, self.y, self.yaw = spec.x, spec.y, spec.yaw
+        self.radius = spec.radius
+        self.x, self.y, self.z, self.yaw = spec.x, spec.y, spec.z, spec.yaw
         self.vx = self.vy = self.wz = 0.0
         self.pose_pub = pose_pub
+        self.go_to = None  # GroundGoTo while one runs
+        self.go_to_t = 0.0  # s into it
 
 
 class GroundRobotSim(Node):
@@ -46,32 +71,110 @@ class GroundRobotSim(Node):
             robot = _Robot(spec, self.create_publisher(PoseStamped, f'/{spec.name}/pose', qos))
             self.create_subscription(Twist, f'/{spec.name}/cmd_vel',
                                      lambda msg, r=robot: self._on_cmd_vel(r, msg), qos)
+            self.create_service(GoTo, f'/{spec.name}/go_to',
+                                lambda req, resp, r=robot: self._on_go_to(r, req, resp))
             self._robots.append(robot)
+
+        self._obstacles = obstacles.load(sim, [r.radius for r in self._robots],
+                                         scenario.obstacles)
+        if self._obstacles is not None:
+            for r in self._robots:
+                if self._obstacles.clearance(r.x, r.y) < r.radius:
+                    self.get_logger().warn(f'{r.name} starts overlapping an obstacle; '
+                                           'it can only move away from it')
+            for i, a in enumerate(self._robots):
+                for b in self._robots[i + 1:]:
+                    if (a.radius > 0.0 and b.radius > 0.0
+                            and math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius):
+                        self.get_logger().warn(f'{a.name} and {b.name} start overlapping; '
+                                               'they can only move apart')
+        self._publish_pillars(scenario.obstacles)
 
         self._tf = TransformBroadcaster(self)
         self.create_timer(self._dt, self._tick)
 
         summary = ', '.join(f'{r.name}({r.drive})' for r in self._robots) or 'none'
+        collisions = 'off' if self._obstacles is None else 'on'
         self.get_logger().info(
             f'ground robots at {sim["ground_rate"]:g} Hz, max {self._max_speed:g} m/s, '
-            f'{self._max_yaw_rate:g} rad/s: {summary}')
+            f'{self._max_yaw_rate:g} rad/s, collisions {collisions}, '
+            f'{len(scenario.obstacles)} pillar(s): {summary}')
+
+    def _publish_pillars(self, pillars):
+        latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                             durability=DurabilityPolicy.TRANSIENT_LOCAL)
+        self._pillar_pub = self.create_publisher(MarkerArray, OBSTACLE_TOPIC, latched)
+        clear = Marker()
+        clear.header.frame_id = FRAME
+        clear.action = Marker.DELETEALL
+        markers = [clear]
+        for i, p in enumerate(pillars):  # config.Pillar; the height is drawn only
+            m = Marker()
+            m.header.frame_id = FRAME
+            m.ns = 'obstacles'
+            m.id = i
+            m.type = Marker.CYLINDER
+            m.action = Marker.ADD
+            m.pose.position.x, m.pose.position.y, m.pose.position.z = p.x, p.y, p.height / 2.0
+            m.pose.orientation.w = 1.0
+            m.scale.x = m.scale.y = 2.0 * p.radius
+            m.scale.z = p.height
+            m.color.r, m.color.g, m.color.b, m.color.a = 0.55, 0.45, 0.4, 1.0
+            markers.append(m)
+        self._pillar_pub.publish(MarkerArray(markers=markers))
 
     def _on_cmd_vel(self, robot, msg):
+        robot.go_to = None
         robot.vx, robot.vy, robot.wz = limit_ground_cmd(
             msg.linear.x, msg.linear.y, msg.angular.z,
             robot.drive, self._max_speed, self._max_yaw_rate)
+
+    def _on_go_to(self, robot, request, response):
+        x, y = request.goal.x, request.goal.y
+        if request.relative:
+            x, y = robot.x + x, robot.y + y
+        duration = request.duration.sec + request.duration.nanosec * 1e-9
+        robot.go_to = GroundGoTo((robot.x, robot.y, robot.yaw), (x, y, request.yaw), robot.drive,
+                                 duration, self._max_speed, self._max_yaw_rate)
+        robot.go_to_t = 0.0
+        robot.vx = robot.vy = robot.wz = 0.0
+        total = robot.go_to.total
+        slower = f' (asked {duration:.2f}s, held to the speed limits)' if total > duration else ''
+        self.get_logger().info(
+            f'[{robot.name}] GO_TO ({x:.2f}, {y:.2f}) yaw={request.yaw:.2f} '
+            f'in {total:.2f}s{slower}')
+        return response
+
+    def _others(self, robot):
+        """The other ground robots, as circles (x, y, radius) for `robot` to keep clear of."""
+        return [(o.x, o.y, o.radius) for o in self._robots if o is not robot and o.radius > 0.0]
 
     def _tick(self):
         stamp = self.get_clock().now().to_msg()
         transforms = []
         for r in self._robots:
-            r.x, r.y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            if r.go_to is not None:
+                t = r.go_to_t + self._dt
+                x, y, yaw = r.go_to.at(t)
+            else:
+                x, y, yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            wanted = (x, y)
+            if self._obstacles is not None:
+                x, y = self._obstacles.move(r.x, r.y, x, y, r.radius, self._others(r))
+            if r.go_to is None:
+                r.yaw = yaw
+            elif (x, y) == wanted:
+                r.go_to_t, r.yaw = t, yaw
+                if t >= r.go_to.total:
+                    r.go_to = None
+            # else blocked: the go_to waits here, its clock stopped, until the way clears
+            r.x, r.y = x, y
             qx, qy, qz, qw = yaw_to_quat(r.yaw)
 
             pose = PoseStamped()
             pose.header.stamp = stamp
             pose.header.frame_id = FRAME
-            pose.pose.position.x, pose.pose.position.y = r.x, r.y
+            pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = r.x, r.y, r.z
             o = pose.pose.orientation
             o.x, o.y, o.z, o.w = qx, qy, qz, qw
             r.pose_pub.publish(pose)
@@ -80,7 +183,8 @@ class GroundRobotSim(Node):
             t.header.stamp = stamp
             t.header.frame_id = FRAME
             t.child_frame_id = r.name
-            t.transform.translation.x, t.transform.translation.y = r.x, r.y
+            t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = (
+                r.x, r.y, r.z)
             t.transform.rotation = o
             transforms.append(t)
         if transforms:

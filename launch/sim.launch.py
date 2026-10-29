@@ -29,6 +29,9 @@ def _actions(context):
         Node(package='hero_sim', executable='ground_robot_sim', name='ground_robot_sim',
              output='screen', parameters=params),
     ]
+    if scenario.tether is not None:
+        actions.append(Node(package='hero_sim', executable='tether_sim', name='tether_sim',
+                            output='screen', parameters=params))
     if config.attach_enabled(sim):
         actions.append(Node(package='hero_sim', executable='sim_attach', name='sim_attach_node',
                             output='screen', parameters=params))
@@ -48,6 +51,6 @@ def _actions(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('config', default_value='',
-                              description='Scenario YAML: a name in config/ or a path'),
+                              description='Scenario YAML: a name in config/ or its folders, or a path'),
         OpaqueFunction(function=_actions),
     ])

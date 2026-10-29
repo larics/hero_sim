@@ -56,4 +56,15 @@ jobs:
           cat launch.log
           grep -q 'crazyflies at' launch.log || { echo "crazyflie_server did not start"; exit 1; }
           grep -q 'ground robots at' launch.log || { echo "ground_robot_sim did not start"; exit 1; }
+          if grep -q 'tether_sim' launch.log; then echo "tether_sim started without a tether: section"; exit 1; fi
           if grep -E 'Traceback|process has died' launch.log; then exit 1; fi
+
+      - name: Tether smoke test
+        working-directory: ws
+        run: |
+          source install/setup.bash
+          printf 'ground_robots: [{name: r1}]\ncrazyflies: [{pose: {}}]\ntether: {winch: {x: -1, y: 0}, object: {x: 1, y: 0}, goal: {x: 2, y: 0}}\nsim: {rviz: false}\n' > /tmp/tether.yaml
+          timeout 10 ros2 launch hero_sim sim.launch.py config:=/tmp/tether.yaml > tether.log 2>&1 || true
+          cat tether.log
+          grep -q 'tether ready' tether.log || { echo "tether_sim did not start"; exit 1; }
+          if grep -E 'Traceback|process has died' tether.log; then exit 1; fi

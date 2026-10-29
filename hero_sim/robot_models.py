@@ -15,8 +15,8 @@ from hero_sim import config
 TOPIC = '/hero_sim/robot_models'
 
 
-def mesh_marker(frame, model, marker_id):
-    """Mesh marker for `model` drawn at the origin of TF frame `frame`."""
+def mesh_marker(frame, model, marker_id, z=0.0):
+    """Mesh marker for `model` drawn at height `z` in TF frame `frame`."""
     m = Marker()
     m.header.frame_id = frame  # stamp 0: RViz uses the latest transform
     m.ns = model
@@ -26,6 +26,7 @@ def mesh_marker(frame, model, marker_id):
     m.mesh_resource = f'package://hero_sim/models/{config.MODEL_MESHES[model]}'
     m.mesh_use_embedded_materials = True  # color left at 0,0,0,0 so RViz doesn't tint
     m.frame_locked = True
+    m.pose.position.z = z
     m.pose.orientation.w = 1.0
     m.scale.x = m.scale.y = m.scale.z = 1.0
     return m
@@ -34,7 +35,8 @@ def mesh_marker(frame, model, marker_id):
 def scenario_markers(scenario):
     markers = [mesh_marker(cf.name, 'crazyflie', i)
                for i, cf in enumerate(scenario.crazyflies)]
-    markers += [mesh_marker(r.name, r.model, i)
+    # A ground robot's frame is at its marker height: drop the mesh back to the floor.
+    markers += [mesh_marker(r.name, r.model, i, -r.z)
                 for i, r in enumerate(scenario.ground_robots) if r.model]
     return markers
 

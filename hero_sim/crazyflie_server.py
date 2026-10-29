@@ -10,7 +10,7 @@ import rclpy
 from rclpy.node import Node
 from tf2_ros import TransformBroadcaster
 
-from hero_sim import config
+from hero_sim import config, obstacles
 from hero_sim.crazyflie import SimCrazyflie
 
 # (service type, /all/<name>, SimCrazyflie callback)
@@ -34,12 +34,20 @@ class CrazyflieServer(Node):
         config_path = config.resolve_config(self.get_parameter('config_path').value)
         scenario = config.load(config_path)
         dt = 1.0 / scenario.sim['cf_rate']
+        obstacle_map = obstacles.load(scenario.sim, [cf.radius for cf in scenario.crazyflies],
+                                      scenario.obstacles)
 
         self.drones = {
             cf.name: SimCrazyflie(self, cf.name, (cf.x, cf.y, cf.z), dt=dt,
-                                  battery_drain=scenario.sim['cf_battery_drain'])
+                                  battery_drain=scenario.sim['cf_battery_drain'],
+                                  radius=cf.radius, obstacles=obstacle_map)
             for cf in scenario.crazyflies
         }
+        if obstacle_map is not None:
+            for cf in scenario.crazyflies:
+                if obstacle_map.clearance(cf.x, cf.y) < cf.radius:
+                    self.get_logger().warn(f'{cf.name} starts overlapping an obstacle; '
+                                           'it can only move away from it')
 
         for srv_type, name, method in _BROADCASTS:
             self.create_service(srv_type, f'/all/{name}', partial(self._broadcast, name, method))
@@ -48,9 +56,10 @@ class CrazyflieServer(Node):
         self.create_timer(dt, self._update_all)
         self.create_timer(STATUS_PERIOD, self._publish_status_all)
 
+        collisions = 'off' if obstacle_map is None else 'on'
         self.get_logger().info(
-            f'{len(self.drones)} crazyflies at {scenario.sim["cf_rate"]:g} Hz from {config_path}: '
-            f'{list(self.drones)}')
+            f'{len(self.drones)} crazyflies at {scenario.sim["cf_rate"]:g} Hz from {config_path}, '
+            f'collisions {collisions}: {list(self.drones)}')
 
     def _update_all(self):
         transforms = [drone.update() for drone in self.drones.values()]
