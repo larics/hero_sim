@@ -1,6 +1,6 @@
-"""2D collisions: keep footprints out of the map and the pillars. No ROS imports.
+"""2D collisions: keep footprints out of the map, the pillars and each other. No ROS imports.
 
-Two kinds of obstacle, both in one ObstacleMap:
+Two kinds of fixed obstacle, both in one ObstacleMap:
 
   map      the scenario's octomap (.bt), flattened once at startup: every
            occupied voxel overlapping the height band sim.collision_z is an
@@ -9,6 +9,9 @@ Two kinds of obstacle, both in one ObstacleMap:
            trunks, posts and walls.
   pillars  the scenario's top-level obstacles: list, circles (x, y, radius)
            kept exact rather than gridded.
+
+Moving robots are circles too, passed to each move as `others`
+(hero_sim/ground_robots.py does that for the ground robots).
 
 Every robot is a disc of its footprint radius (config.FOOTPRINT_RADII), and so
 is the tether object (hero_sim/tether.py). A move is checked along its
@@ -121,33 +124,36 @@ class ObstacleMap:
         return cls(occupied, (kx0 - _KEY_ORIGIN) * res, (ky0 - _KEY_ORIGIN) * res, res,
                    max_radius, circles)
 
-    def clearance(self, x, y):
-        """Distance (m) from (x, y) to the nearest obstacle; inf if beyond max_radius."""
+    def clearance(self, x, y, others=()):
+        """Distance (m) from (x, y) to the nearest obstacle; inf if beyond max_radius.
+
+        others: more circles (x, y, radius) to count, such as other robots.
+        """
         best = math.inf
         row = math.floor((y - self.y0) / self.res)
         col = math.floor((x - self.x0) / self.res)
         if 0 <= row < self._clearance.shape[0] and 0 <= col < self._clearance.shape[1]:
             best = float(self._clearance[row, col])
-        for cx, cy, r in self.circles:
+        for cx, cy, r in (*self.circles, *others):
             best = min(best, max(math.hypot(x - cx, y - cy) - r, 0.0))
         return best if best < self.max_radius else math.inf
 
-    def move(self, x0, y0, x1, y1, radius):
+    def move(self, x0, y0, x1, y1, radius, others=()):
         """Where a disc of `radius` moving straight from (x0, y0) to (x1, y1) ends up.
 
         Samples the path every half cell and stops at the last sample before
-        the disc would touch an obstacle. A disc that already overlaps one
-        (spawned or teleported there) may move, just not deeper into it.
-        Radius 0 never collides.
+        the disc would touch an obstacle or one of `others` (circles x, y,
+        radius). A disc that already overlaps one (spawned or teleported
+        there) may move, just not deeper into it. Radius 0 never collides.
         """
         if radius > self.max_radius:
             raise ValueError(f'radius {radius} m is over max_radius {self.max_radius} m')
         steps = int(math.hypot(x1 - x0, y1 - y0) / (0.5 * self.res)) + 1
         x, y = x0, y0
-        clear = self.clearance(x, y)
+        clear = self.clearance(x, y, others)
         for i in range(1, steps + 1):
             nx, ny = x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps
-            next_clear = self.clearance(nx, ny)
+            next_clear = self.clearance(nx, ny, others)
             if next_clear < radius and next_clear < clear:
                 return x, y
             x, y, clear = nx, ny, next_clear
@@ -155,17 +161,16 @@ class ObstacleMap:
 
 
 def load(sim, radii, pillars=()):
-    """The scenario's ObstacleMap for robots of these radii, or None when there's nothing to check.
+    """The scenario's ObstacleMap for robots of these radii, or None when collisions are off.
 
     pillars: the scenario's obstacles, (x, y, radius) each. None when
-    sim.collision is off, there are no robots, or neither a map nor pillars.
+    sim.collision is off or there are no robots. Without a map or pillars the
+    map is empty, but still checks the `others` passed to move().
     """
     if not sim['collision'] or not radii:
         return None
     bt_file = config.resolve_map(sim['map'])
     if bt_file is None:
-        if not pillars:
-            return None
         return ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, max(radii), pillars)
     return ObstacleMap.from_bt(bt_file, *sim['collision_z'], max_radius=max(radii),
                                circles=pillars)

@@ -10,12 +10,17 @@ to goal x, y and yaw in `duration`, or slower to stay within the speed limits
 (kinematics.GroundGoTo). relative makes x, y an offset in the world frame;
 goal.z and group_mask are ignored. Any cmd_vel message cancels it.
 
-With sim.collision on, a robot stops where its footprint would hit the map or
-a pillar (hero_sim/obstacles.py) and resumes when cmd_vel points away.
+With sim.collision on, a robot stops where its footprint would hit the map, a
+pillar or another ground robot (hero_sim/obstacles.py), and resumes when
+cmd_vel points away. A blocked go_to waits where it stopped and carries on
+once the way is clear. The robots move one after another each tick, each
+against the others' current positions, so they never end up overlapping.
 
 This node also draws the scenario's pillars (its obstacles: list), latched on
 /hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter.
 """
+import math
+
 from crazyflie_interfaces.srv import GoTo
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
 import rclpy
@@ -77,6 +82,12 @@ class GroundRobotSim(Node):
                 if self._obstacles.clearance(r.x, r.y) < r.radius:
                     self.get_logger().warn(f'{r.name} starts overlapping an obstacle; '
                                            'it can only move away from it')
+            for i, a in enumerate(self._robots):
+                for b in self._robots[i + 1:]:
+                    if (a.radius > 0.0 and b.radius > 0.0
+                            and math.hypot(a.x - b.x, a.y - b.y) < a.radius + b.radius):
+                        self.get_logger().warn(f'{a.name} and {b.name} start overlapping; '
+                                               'they can only move apart')
         self._publish_pillars(scenario.obstacles)
 
         self._tf = TransformBroadcaster(self)
@@ -134,19 +145,29 @@ class GroundRobotSim(Node):
             f'in {total:.2f}s{slower}')
         return response
 
+    def _others(self, robot):
+        """The other ground robots, as circles (x, y, radius) for `robot` to keep clear of."""
+        return [(o.x, o.y, o.radius) for o in self._robots if o is not robot and o.radius > 0.0]
+
     def _tick(self):
         stamp = self.get_clock().now().to_msg()
         transforms = []
         for r in self._robots:
             if r.go_to is not None:
-                r.go_to_t += self._dt
-                x, y, r.yaw = r.go_to.at(r.go_to_t)
-                if r.go_to_t >= r.go_to.total:
-                    r.go_to = None
+                t = r.go_to_t + self._dt
+                x, y, yaw = r.go_to.at(t)
             else:
-                x, y, r.yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+                x, y, yaw = integrate_ground(r.x, r.y, r.yaw, r.vx, r.vy, r.wz, self._dt)
+            wanted = (x, y)
             if self._obstacles is not None:
-                x, y = self._obstacles.move(r.x, r.y, x, y, r.radius)
+                x, y = self._obstacles.move(r.x, r.y, x, y, r.radius, self._others(r))
+            if r.go_to is None:
+                r.yaw = yaw
+            elif (x, y) == wanted:
+                r.go_to_t, r.yaw = t, yaw
+                if t >= r.go_to.total:
+                    r.go_to = None
+            # else blocked: the go_to waits here, its clock stopped, until the way clears
             r.x, r.y = x, y
             qx, qy, qz, qw = yaw_to_quat(r.yaw)
 

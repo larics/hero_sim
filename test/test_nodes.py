@@ -20,7 +20,7 @@ ground_robots:
     pose: {x: 1.0, y: 0.0, yaw: 1.5707963267948966}
     model: scout
   - name: herover_1
-    pose: {x: 0.0, y: 0.0, yaw: 0.0}
+    pose: {x: 0.0, y: -1.0, yaw: 0.0}  # clear of scout_1's path in the cmd_vel test
     drive: diff
 crazyflies:
   - pose: {x: 0.5, y: 0.5, z: 0.03}
@@ -266,6 +266,8 @@ def test_ground_go_to_stops_at_a_pillar(ground):
     for _ in range(60):
         ground._tick()
     assert 2.5 - 0.05 <= omni.x <= 2.5  # pillar edge at 2.8, minus the radius 0.3
+    assert omni.go_to is not None  # past its 5 s, still waiting for the way to clear
+    ground._on_cmd_vel(omni, twist())
     assert omni.go_to is None
 
 
@@ -282,6 +284,77 @@ def test_ground_go_to_service_call(ground, make):
     assert future.done()
     goal = ground._robots[1].go_to.goal
     assert goal == pytest.approx((1.0, 3.0, 0.0))
+
+
+TWO_SCENARIO = """
+ground_robots:
+  - name: a
+    pose: {x: 0.0, y: 0.0}
+    radius: 0.3
+  - name: b
+    pose: {x: 2.0, y: 0.0, yaw: 3.141592653589793}
+    radius: 0.2
+sim: {map: null, ground_rate: 10.0, ground_max_speed: 1.0}
+"""
+
+
+def gap(a, b):
+    """Distance between the edges of two robots' footprints; < 0 when they overlap."""
+    return math.hypot(a.x - b.x, a.y - b.y) - a.radius - b.radius
+
+
+def test_ground_robots_stop_at_each_other(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(TWO_SCENARIO)
+    sim = make(GroundRobotSim)
+    a, b = sim._robots
+    sim._on_cmd_vel(a, twist(vx=1.0))
+    sim._on_cmd_vel(b, twist(vx=1.0))  # b faces -x: head-on
+    for _ in range(20):
+        sim._tick()
+        assert gap(a, b) >= 0.0
+    assert gap(a, b) <= 0.05  # touching, within a path sample each
+    assert (a.y, b.y) == pytest.approx((0.0, 0.0))
+
+    sim._on_cmd_vel(a, twist(vx=-1.0))  # backing away is free, b still pushing
+    sim._on_cmd_vel(b, twist())
+    sim._tick()
+    assert gap(a, b) == pytest.approx(0.1, abs=0.05)
+
+
+@pytest.mark.parametrize('change', ['radius: 0.2|radius: 0.0',
+                                    'map: null|map: null, collision: false'])
+def test_ground_robots_pass_through_without_collisions(make, scenario_file, change):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(TWO_SCENARIO.replace(*change.split('|')))
+    sim = make(GroundRobotSim)
+    a, _ = sim._robots
+    sim._on_cmd_vel(a, twist(vx=1.0))
+    for _ in range(30):
+        sim._tick()
+    assert a.x == pytest.approx(3.0)
+
+
+def test_blocked_go_to_waits_then_carries_on(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(TWO_SCENARIO)
+    sim = make(GroundRobotSim)
+    a, b = sim._robots
+    sim._on_go_to(a, go_to(4.0, 0.0), GoTo.Response())  # 4 s at 1 m/s, b in the way
+    for _ in range(50):
+        sim._tick()
+    assert 1.5 - 0.05 <= a.x <= 1.5 and a.go_to is not None  # waiting at b
+
+    sim._on_cmd_vel(b, twist(vy=1.0))  # b faces -x: its left is -y
+    for i in range(50):
+        if i == 10:
+            sim._on_cmd_vel(b, twist())  # b parked at (2, -1)
+        before = a.x
+        sim._tick()
+        assert gap(a, b) >= 0.0
+        assert a.x - before <= 0.1 + 0.03  # resumes at its speed, no jump to the schedule
+    assert b.y == pytest.approx(-1.0)
+    assert (a.x, a.y) == pytest.approx((4.0, 0.0)) and a.go_to is None
 
 
 def _latched(make, topic, publisher_cls):

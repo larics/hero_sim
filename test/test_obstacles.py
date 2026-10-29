@@ -94,12 +94,19 @@ def test_radius_zero_never_collides_and_too_big_raises():
         m.move(0.0, 0.0, 1.0, 0.0, radius=0.4)
 
 
-def test_load_off_without_map_robots_or_collision():
+def test_load_off_without_robots_or_collision():
     sim = dict(config.SIM_DEFAULTS, map=str(ICUAS26_1))
     assert load(sim, [0.1]) is not None
     assert load(dict(sim, collision=False), [0.1]) is None
-    assert load(dict(sim, map=None), [0.1]) is None
     assert load(sim, []) is None
+
+
+def test_load_without_map_or_pillars_still_checks_others():
+    m = load(dict(config.SIM_DEFAULTS, map=None), [0.3])
+    assert m.clearance(0.0, 0.0) == math.inf
+    assert m.move(0.0, 0.0, 2.0, 0.0, 0.3) == (2.0, 0.0)
+    x, _ = m.move(0.0, 0.0, 2.0, 0.0, 0.3, others=[(1.0, 0.0, 0.2)])
+    assert 0.5 - PILLAR_RES / 2 <= x <= 0.5
 
 
 def test_pillar_clearance_is_exact_to_its_edge():
@@ -124,6 +131,24 @@ def test_move_stops_before_a_pillar_by_radius():
     assert y == 0.0
     assert 0.5 - PILLAR_RES / 2 <= x <= 0.5  # pillar edge at 0.8, minus the radius
     assert m.move(0.0, 0.6, 2.0, 0.6, radius=0.3) == (2.0, 0.6)  # passes beside it
+
+
+def test_others_count_like_pillars():
+    m = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5)
+    robot = [(1.0, 0.0, 0.2)]
+    assert m.clearance(1.5, 0.0) == math.inf
+    assert m.clearance(1.5, 0.0, robot) == pytest.approx(0.3)
+    x, y = m.move(0.0, 0.0, 2.0, 0.0, 0.3, robot)
+    assert 0.5 - PILLAR_RES / 2 <= x <= 0.5 and y == 0.0
+    assert m.move(0.0, 0.6, 2.0, 0.6, 0.3, robot) == (2.0, 0.6)  # passes beside it
+    assert m.move(0.7, 0.0, 0.0, 0.0, 0.3, robot) == (0.0, 0.0)  # overlapping: backs away
+    assert m.move(0.7, 0.0, 0.9, 0.0, 0.3, robot) == (0.7, 0.0)  # but not deeper
+
+
+def test_nearest_of_pillars_and_others():
+    m = pillar_map()  # pillar edge at x = 0.8
+    assert m.clearance(0.0, 0.0, [(0.0, 0.5, 0.1)]) == pytest.approx(0.4)
+    assert m.clearance(0.0, 0.0, [(0.0, 2.0, 0.1)]) == math.inf  # both beyond max_radius
 
 
 def test_load_pillars_with_and_without_map():

@@ -1,0 +1,25 @@
+# Two UGVs, no tether: the tether demo's floor and pillar, with a second
+# herover and no drone.
+#
+#   bash start.sh two_ugvs.yaml         # sim + RViz
+#
+# Controls: /herover_<n>/cmd_vel (Twist, body frame) or /herover_<n>/go_to
+#           (crazyflie_interfaces/srv/GoTo). Feedback: /herover_<n>/pose,
+#           /hero_sim/obstacles. See README "Driving the robots" and "Obstacles".
+
+ground_robots:
+  - name: herover_1
+    pose: {x: -1.5, y: -1.5, yaw: 0.0}
+    drive: omni
+    model: herover
+  - name: herover_2
+    pose: {x: -1.5, y: 1.5, yaw: 0.0}
+    drive: omni
+    model: herover
+
+obstacles:                             # pillars: block both robots
+  - {x: 1.5, y: 0.5, radius: 0.35}
+
+sim:
+  map: null
+  collision: true

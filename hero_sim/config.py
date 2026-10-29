@@ -27,7 +27,7 @@ SIM_DEFAULTS = {
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
-    'collision': True,           # stop robots at the map and pillars (2D, hero_sim/obstacles.py)
+    'collision': True,           # stop robots at the map, pillars and each other (obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
 }
 

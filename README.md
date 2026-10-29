@@ -120,7 +120,7 @@ A ground robot's `go_to` uses the same service type as the Crazyflies':
 - It reaches the goal's x, y and yaw in `duration`, or more slowly if that's needed to stay within `sim.ground_max_speed` and `sim.ground_max_yaw_rate` (2 m/s and 2 rad/s by default; `duration: 0` means as fast as allowed).
 - An omni robot drives straight while it turns. A diff robot turns to face the goal, drives, then turns to the yaw.
 - `relative: true` makes x and y an offset from where the robot is, in the world frame; yaw stays absolute. `goal.z` and `group_mask` are ignored.
-- Any `cmd_vel` message cancels it, and it stops at [obstacles](#obstacles) like every other move.
+- Any `cmd_vel` message cancels it. It stops at [obstacles](#obstacles) like every other move; a blocked `go_to` waits where it stopped and carries on once the way is clear, such as when the other robot drives off.
 
 As on hardware, where the mocap markers sit on top of the robot, a ground robot's pose is at its marker height rather than on the floor: the top of the deck, scout 0.227 m and herover 0.095 m (0 without a model). Docks the control stack places on a robot are relative to this height. To change it, set `pose: {z: ...}`; the RViz model stays on the floor.
 
@@ -132,6 +132,8 @@ Robots can't drive or fly into obstacles. There are two kinds, and both block in
 - **Pillars.** Circles listed under a top-level `obstacles:` key. They work with or without a map (`map: null`).
 
 Each robot is a circle of its `radius`, and a move stops where that circle would touch an obstacle. The robot moves again as soon as it's commanded away. Height changes always go through, so a drone blocked by a trunk or a pillar can still climb or land, but it can't fly over it.
+
+Ground robots also stop at each other, under the same switch. Drones aren't checked against the ground robots, so they can dock on them, or against each other. A robot with `radius: 0` ignores all of it.
 
 ```yaml
 ground_robots:
