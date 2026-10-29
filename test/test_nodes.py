@@ -145,7 +145,7 @@ crazyflies:
   - pose: {x: 0.0, y: 1.0, z: 1.0}
 obstacles:
   - {x: 1.0, y: 0.0, radius: 0.2}
-  - {x: 1.0, y: 1.0, radius: 0.2}
+  - {x: 1.0, y: 1.0, radius: 0.2, height: 0.5}
 sim: {map: null, ground_rate: 10.0, cf_rate: 10.0}
 """
 
@@ -174,7 +174,8 @@ def test_crazyflies_stop_at_pillars_at_any_height(make, scenario_file):
     cf._go_to_cb(req, GoTo.Response())
     for _ in range(20):
         server._update_all()
-    assert 0.7 - 0.05 <= cf.position[0] <= 0.7  # pillar edge at 0.8, minus 0.1
+    # Pillar edge at 0.8, minus 0.1: the pillar is 0.5 m tall, but blocks at any height.
+    assert 0.7 - 0.05 <= cf.position[0] <= 0.7
     assert cf.position[2] == pytest.approx(1.5)  # height still goes through
 
 
@@ -381,7 +382,7 @@ def _latched(make, topic, publisher_cls):
 
 def test_pillars_drawn_latched_even_with_collision_off(make, scenario_file):
     from visualization_msgs.msg import Marker
-    from hero_sim.ground_robots import OBSTACLE_TOPIC, PILLAR_HEIGHT, GroundRobotSim
+    from hero_sim.ground_robots import OBSTACLE_TOPIC, GroundRobotSim
 
     scenario_file(PILLAR_SCENARIO.replace('map: null', 'map: null, collision: false'))
     markers = _latched(make, OBSTACLE_TOPIC, GroundRobotSim).markers
@@ -391,7 +392,7 @@ def test_pillars_drawn_latched_even_with_collision_off(make, scenario_file):
         ('obstacles', 0, Marker.CYLINDER, 'world'), ('obstacles', 1, Marker.CYLINDER, 'world')]
     assert [(m.pose.position.x, m.pose.position.y) for m in pillars] == [(1.0, 0.0), (1.0, 1.0)]
     assert all(m.scale.x == m.scale.y == pytest.approx(0.4) for m in pillars)
-    assert all(m.scale.z == PILLAR_HEIGHT for m in pillars)
+    assert [(m.scale.z, m.pose.position.z) for m in pillars] == [(2.0, 1.0), (0.5, 0.25)]
 
 
 def test_robot_models_latched_and_frame_locked(make):

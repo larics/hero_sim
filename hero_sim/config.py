@@ -5,7 +5,8 @@ A scenario file has these sections (see config/example.yaml):
   ground_robots   kinematic ground robots, one entry per robot
   crazyflies      Crazyflies, named cf_1..cf_N in list order
   sim             optional overrides of SIM_DEFAULTS
-  obstacles       optional pillars (x, y, radius) that block robots and the tether object
+  obstacles       optional pillars that block robots and the tether object; they make
+                  their own octomap, so a scenario has obstacles or sim.map, not both
   tether          optional winch, tether and object (hero_sim/tether.py)
 
 Unknown keys are rejected so typos fail loudly instead of being ignored.
@@ -14,6 +15,7 @@ from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
@@ -48,6 +50,7 @@ FOOTPRINT_RADII = {
     'scout': 0.42,
 }
 DEFAULT_GROUND_RADIUS = 0.3
+DEFAULT_PILLAR_HEIGHT = 2.0  # m
 
 # Height (m) a ground robot's pose reports, by model: on hardware the mocap
 # markers sit on top, so the pose is up there and not on the floor. Measured
@@ -85,6 +88,14 @@ class Crazyflie:
     radius: float = FOOTPRINT_RADII['crazyflie']  # m, footprint for map collisions
 
 
+class Pillar(NamedTuple):
+    """One entry of a scenario's obstacles: list, in m."""
+    x: float
+    y: float
+    radius: float
+    height: float = DEFAULT_PILLAR_HEIGHT  # in RViz and the octomap; collisions ignore it
+
+
 @dataclass(frozen=True)
 class Tether:
     """Winch -> pulley on a ground robot -> ring on a Crazyflie -> object on the floor."""
@@ -109,7 +120,7 @@ class Scenario:
     crazyflies: tuple
     sim: dict
     tether: Tether = None
-    obstacles: tuple = ()  # (x, y, radius) pillars (m), see hero_sim/obstacles.py
+    obstacles: tuple = ()  # Pillars, see hero_sim/obstacles.py
 
 
 def load(path):
@@ -159,6 +170,11 @@ def parse(raw):
     sim['collision_z'] = (float(band[0]), float(band[1]))
 
     pillars = tuple(_pillar(i, o) for i, o in enumerate(_list(raw, 'obstacles')))
+    if pillars:
+        if sim_raw.get('map'):
+            raise ValueError('sim.map and obstacles: are both set; use one or the other '
+                             '(the obstacles make their own map)')
+        sim['map'] = None  # instead of the default map
     tether = (_tether(raw['tether'], ground, cfs, pillars)
               if raw.get('tether') is not None else None)
     return Scenario(ground, cfs, sim, tether, pillars)
@@ -253,10 +269,12 @@ def _point(value, where, axes, **defaults):
 
 def _pillar(i, entry):
     where = f'obstacles[{i}]'
-    x, y, r = _point(entry, where, ('x', 'y', 'radius'))
-    if r <= 0.0:
-        raise ValueError(f'{where}.radius must be > 0, got {r}')
-    return x, y, r
+    pillar = Pillar(*_point(entry, where, ('x', 'y', 'radius', 'height'),
+                            height=DEFAULT_PILLAR_HEIGHT))
+    for key in ('radius', 'height'):
+        if getattr(pillar, key) <= 0.0:
+            raise ValueError(f'{where}.{key} must be > 0, got {getattr(pillar, key)}')
+    return pillar
 
 
 def _tether(entry, ground, cfs, pillars):
@@ -289,8 +307,9 @@ def _tether(entry, ground, cfs, pillars):
         raise ValueError(f'{where}.slack must be >= 0, got {tether.slack}')
     if tether.goal[2] <= 0.0:
         raise ValueError(f'{where}.goal.radius must be > 0, got {tether.goal[2]}')
-    for i, (x, y, r) in enumerate(pillars):
-        if math.hypot(tether.object[0] - x, tether.object[1] - y) < r + tether.object_radius:
+    ox, oy = tether.object
+    for i, p in enumerate(pillars):
+        if math.hypot(ox - p.x, oy - p.y) < p.radius + tether.object_radius:
             raise ValueError(f'{where}.object starts inside obstacles[{i}]')
     return tether
 

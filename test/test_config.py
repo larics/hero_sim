@@ -83,8 +83,15 @@ def test_crazyflie_gripper_is_optional():
 
 def test_obstacles_are_optional_and_parsed():
     assert parse('{}').obstacles == ()
-    s = parse('obstacles: [{x: 1, y: 2, radius: 0.5}, {x: -1, y: 0, radius: 0.1}]')
-    assert s.obstacles == ((1.0, 2.0, 0.5), (-1.0, 0.0, 0.1))
+    s = parse('obstacles: [{x: 1, y: 2, radius: 0.5}, {x: -1, y: 0, radius: 0.1, height: 0.4}]')
+    assert s.obstacles == ((1.0, 2.0, 0.5, config.DEFAULT_PILLAR_HEIGHT), (-1.0, 0.0, 0.1, 0.4))
+    assert s.obstacles[1].height == 0.4
+
+
+def test_obstacles_replace_the_default_map():
+    assert parse('{}').sim['map'] == config.SIM_DEFAULTS['map']
+    assert parse('obstacles: [{x: 1, y: 2, radius: 0.5}]').sim['map'] is None
+    assert parse('obstacles: [{x: 1, y: 2, radius: 0.5}]\nsim: {map: null}').sim['map'] is None
 
 
 def test_drive_is_case_insensitive():
@@ -119,6 +126,9 @@ def test_drive_is_case_insensitive():
     ('obstacles: [{x: 0, y: 0, radius: 1, z: 2}]', r"obstacles\[0\]: unknown key.*'z'"),
     ('obstacles: [{x: 0, y: 0, radius: 1}, {x: 0, y: 0, radius: 0}]',
      r'obstacles\[1\].radius must be > 0'),
+    ('obstacles: [{x: 0, y: 0, radius: 1, height: 0}]', r'obstacles\[0\].height must be > 0'),
+    ('obstacles: [{x: 0, y: 0, radius: 1}]\nsim: {map: icuas26_1}',
+     'sim.map and obstacles: are both set'),
 ])
 def test_rejects_bad_config(text, match):
     with pytest.raises(ValueError, match=match):
@@ -260,7 +270,7 @@ def test_rejects_bad_tether(extra, match):
 
 def test_tether_object_must_start_clear_of_pillars():
     clear = TETHER_ROBOTS + 'obstacles: [{x: 1.4, y: 2, radius: 0.2}]\n'
-    assert parse(clear + f'tether: {TETHER_MIN}}}').obstacles == ((1.4, 2.0, 0.2),)
+    assert parse(clear + f'tether: {TETHER_MIN}}}').obstacles == ((1.4, 2.0, 0.2, 2.0),)
     inside = TETHER_ROBOTS + 'obstacles: [{x: 0, y: 0, radius: 0.1}, {x: 1.3, y: 2, radius: 0.2}]'
     with pytest.raises(ValueError, match=r'tether.object starts inside obstacles\[1\]'):
         parse(inside + f'\ntether: {TETHER_MIN}}}')

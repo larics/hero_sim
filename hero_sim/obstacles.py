@@ -8,7 +8,8 @@ Two kinds of fixed obstacle, both in one ObstacleMap:
            slab, ceilings and the tree canopies the drones perch in, and keeps
            trunks, posts and walls.
   pillars  the scenario's top-level obstacles: list, circles (x, y, radius)
-           kept exact rather than gridded.
+           kept exact rather than gridded. A scenario has these or a map, not
+           both. For RViz, write_pillar_map turns them into an octomap.
 
 Moving robots are circles too, passed to each move as `others`
 (hero_sim/ground_robots.py does that for the ground robots).
@@ -23,6 +24,7 @@ Map lookups are O(1): ObstacleMap precomputes each cell's distance to the
 nearest map obstacle, up to the largest radius it will be asked about.
 """
 import math
+from pathlib import Path
 
 import numpy as np
 
@@ -87,11 +89,11 @@ class ObstacleMap:
     def __init__(self, occupied, x0, y0, res, max_radius, circles=()):
         """occupied: bool array [row = y, col = x] with cell (0, 0) at (x0, y0).
 
-        circles: pillars (x, y, radius), in m.
+        circles: pillars (x, y, radius[, height]), in m. Height is ignored.
         """
         self.res = res
         self.max_radius = max_radius
-        self.circles = tuple(tuple(float(v) for v in c) for c in circles)
+        self.circles = tuple(tuple(float(v) for v in c[:3]) for c in circles)  # drop any height
         # Pad by the farthest reach so robots just outside the obstacles' extent are covered.
         n = math.ceil(max_radius / res + 0.5)
         self.x0, self.y0 = x0 - n * res, y0 - n * res
@@ -160,10 +162,69 @@ class ObstacleMap:
         return x1, y1
 
 
+def pillar_voxels(pillars, res=PILLAR_RES):
+    """Octomap keys (kx, ky, kz) of the voxels that fill config.Pillars.
+
+    A voxel is in a pillar when its center is inside the pillar's circle, from
+    the floor (z = 0, no ground plane) up to the pillar's height.
+    """
+    keys = set()
+    for x, y, r, height in pillars:
+        layers = range(max(1, round(height / res)))
+        for kx in range(math.floor((x - r) / res), math.floor((x + r) / res) + 1):
+            for ky in range(math.floor((y - r) / res), math.floor((y + r) / res) + 1):
+                if math.hypot((kx + 0.5) * res - x, (ky + 0.5) * res - y) <= r:
+                    keys.update((kx + _KEY_ORIGIN, ky + _KEY_ORIGIN, kz + _KEY_ORIGIN)
+                                for kz in layers)
+    return keys
+
+
+def write_bt(path, voxels, res):
+    """Write occupied voxels (octomap keys) as an octomap .bt file; read_bt reads it back.
+
+    Every voxel is a leaf at full depth (nothing pruned), the rest is unknown.
+    """
+    if not voxels:
+        raise ValueError('no voxels to write')
+    data = bytearray()
+    nodes = 1  # the root; the header's size must match what octomap reads
+
+    def write_node(keys, kx, ky, kz, size):
+        # The read_node encoding: 2 bits per child, 10 occupied leaf, 11 inner node.
+        nonlocal nodes
+        half = size // 2
+        children = [[] for _ in range(8)]
+        for key in keys:
+            i = (key[0] >= kx + half) | (key[1] >= ky + half) << 1 | (key[2] >= kz + half) << 2
+            children[i].append(key)
+        kind = 2 if half == 1 else 3
+        bits = sum(kind << 2 * i for i, child in enumerate(children) if child)
+        data.extend((bits & 0xFF, bits >> 8))
+        nodes += sum(1 for child in children if child)
+        if kind == 3:
+            for i, child in enumerate(children):
+                if child:
+                    write_node(child, kx + half * (i & 1), ky + half * (i >> 1 & 1),
+                               kz + half * (i >> 2), half)
+
+    write_node(sorted(voxels), 0, 0, 0, 1 << _TREE_DEPTH)
+    with open(path, 'wb') as f:
+        f.write(b'# Octomap OcTree binary file\n'
+                b'# written by hero_sim from a scenario\'s obstacles\n'
+                + f'id OcTree\nsize {nodes}\nres {res}\ndata\n'.encode() + bytes(data))
+
+
+def write_pillar_map(path, pillars, res=PILLAR_RES):
+    """Write config.Pillars as an octomap .bt at `path` (dirs made as needed). Returns path."""
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    write_bt(path, pillar_voxels(pillars, res), res)
+    return path
+
+
 def load(sim, radii, pillars=()):
     """The scenario's ObstacleMap for robots of these radii, or None when collisions are off.
 
-    pillars: the scenario's obstacles, (x, y, radius) each. None when
+    pillars: the scenario's obstacles (config.Pillar). None when
     sim.collision is off or there are no robots. Without a map or pillars the
     map is empty, but still checks the `others` passed to move().
     """

@@ -64,12 +64,12 @@ ground_robots:
 crazyflies:                             # named cf_1, cf_2, ... in this order
   - pose: {x: 1.0, y: 0.0, z: 0.03}
 
-obstacles:                              # optional pillars
+obstacles:                              # optional pillars, on an empty floor
   - {x: 2.0, y: 1.0, radius: 0.3}
-
-sim:
-  map: null                             # no map: an empty floor
+  - {x: 3.0, y: -1.0, radius: 0.2, height: 0.5}
 ```
+
+A scenario's world is either a map (`sim: {map: ...}`, an octomap `.bt` file, `icuas26_1` by default) or `obstacles:`, not both.
 
 ## Moving the robots
 
@@ -117,15 +117,17 @@ The low-level setpoint topics (`cmd_position`, `cmd_hover`, ...) work too.
 
 A robot stops when it would hit something, and moves again once you command it away. These block it:
 
-- the map's trunks and posts, in scenarios with a `map:`;
+- the map's trunks and posts;
 - pillars, from the scenario's `obstacles:` list;
 - other ground robots.
 
-Drones are blocked at any height: they have to fly around a trunk or a pillar, not over it. Drones don't collide with ground robots or with each other.
+Pillars show up in RViz the same way a map does, as occupied cells, and also as cylinders. `height:` sets how tall a pillar is drawn (2 m if left out).
+
+Drones are blocked at any height, even above a short pillar: they have to fly around a trunk or a pillar, not over it. Drones don't collide with ground robots or with each other.
 
 Each robot is a circle, and its size is its `radius:`, which you can set per robot (defaults: herover 0.17 m, scout 0.42 m, Crazyflie 0.1 m). To turn all collisions off, set `sim: {collision: false}`.
 
-Your code can read the pillars from `/hero_sim/obstacles` (`visualization_msgs/MarkerArray`). There's one cylinder per pillar: `pose.position` is its center, and `scale.x` its diameter.
+Your code can read the pillars from `/hero_sim/obstacles` (`visualization_msgs/MarkerArray`). There's one cylinder per pillar: `pose.position` is its center, `scale.x` its diameter and `scale.z` its height.
 
 ```bash
 ros2 topic echo --once /hero_sim/obstacles
@@ -177,6 +179,7 @@ The `tether:` section of `config/tether/tether_demo.yaml` sets where the winch, 
 | Problem | What to do |
 |---|---|
 | `config not found` | Check the filename: `ls ~/ros2_ws/src/hero_sim/config/*` |
+| `sim.map and obstacles: are both set` | A scenario has a map or obstacles, not both: remove one |
 | `... is in more than one folder` | Two configs share a filename: name the folder (`mrs/my.yaml`) or rename one. After configs were moved, an old build can also cause it: `rm -rf ~/ros2_ws/build/hero_sim ~/ros2_ws/install/hero_sim`, then build again |
 | `Package 'hero_sim' not found` | Build ([Setup](#setup) step 2), then open a new terminal |
 | `ros2 launch` doesn't find a config you just added | Build again. `start.sh` finds new files without a rebuild |

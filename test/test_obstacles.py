@@ -5,7 +5,11 @@ import pytest
 
 from conftest import CONFIG_DIR, wall_map
 from hero_sim import config
-from hero_sim.obstacles import PILLAR_RES, ObstacleMap, load, read_bt
+from hero_sim.config import Pillar
+from hero_sim.obstacles import (
+    _KEY_ORIGIN, PILLAR_RES, ObstacleMap, load, pillar_voxels, read_bt, write_bt,
+    write_pillar_map,
+)
 
 MAPS = sorted((CONFIG_DIR.parent / 'maps').glob('*.bt'))
 ICUAS26_1 = CONFIG_DIR.parent / 'maps' / 'icuas26_1.bt'
@@ -162,3 +166,46 @@ def test_load_pillars_with_and_without_map():
     both = load(dict(sim, map=str(ICUAS26_1)), [0.1], [(0.0, 0.0, 0.2)])
     assert both.clearance(0.0, 0.0) == 0.0
     assert both.clearance(*TRUNK) == 0.0
+
+
+def bt_header(path):
+    head = path.read_bytes().split(b'data\n')[0].decode()
+    return dict(line.split(None, 1) for line in head.splitlines() if not line.startswith('#'))
+
+
+def test_write_bt_one_voxel(tmp_path):
+    path = tmp_path / 'one.bt'
+    write_bt(path, {(_KEY_ORIGIN, _KEY_ORIGIN + 1, _KEY_ORIGIN + 2)}, 0.05)
+    # octomap checks the node count: the root plus one node on each of 16 levels.
+    assert bt_header(path) == {'id': 'OcTree', 'size': '17', 'res': '0.05'}
+    res, boxes = read_bt(path)
+    assert res == 0.05
+    assert boxes.tolist() == [[_KEY_ORIGIN, _KEY_ORIGIN + 1, _KEY_ORIGIN + 2, 1]]
+    with pytest.raises(ValueError, match='no voxels'):
+        write_bt(path, set(), 0.05)
+
+
+def test_pillar_voxels_fill_the_circle_from_the_floor_up():
+    voxels = pillar_voxels([Pillar(1.0, -0.5, 0.2, height=0.5)], res=0.05)
+    assert all(math.hypot((kx - _KEY_ORIGIN + 0.5) * 0.05 - 1.0,
+                          (ky - _KEY_ORIGIN + 0.5) * 0.05 + 0.5) <= 0.2 for kx, ky, _ in voxels)
+    assert sorted({kz - _KEY_ORIGIN for _, _, kz in voxels}) == list(range(10))  # 0 to 0.5 m
+    columns = len(voxels) // 10
+    assert columns == pytest.approx(math.pi * 0.2 ** 2 / 0.05 ** 2, rel=0.1)
+
+
+def test_pillar_map_reads_back_as_the_same_obstacle(tmp_path):
+    pillars = [Pillar(1.5, 0.5, 0.35), Pillar(-1.0, 2.0, 0.2, height=1.0)]
+    path = write_pillar_map(tmp_path / 'new' / 'p.bt', pillars)
+    res, boxes = read_bt(path)
+    assert {tuple(b[:3]) for b in boxes.tolist()} == pillar_voxels(pillars)
+    flat = ObstacleMap.from_bt(path, 0.2, 2.0, max_radius=0.5)
+    exact = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5, pillars)
+    for x, y in ((1.5, 0.5), (-1.0, 2.0), (1.5 + 0.45, 0.5), (-1.0, 2.0 - 0.3), (0.0, 0.0)):
+        assert flat.clearance(x, y) == pytest.approx(exact.clearance(x, y), abs=res)
+
+
+def test_circles_ignore_a_pillar_height():
+    a = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5, [(1.0, 0.0, 0.2)])
+    b = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5, [Pillar(1.0, 0.0, 0.2, 0.1)])
+    assert a.circles == b.circles == ((1.0, 0.0, 0.2),)

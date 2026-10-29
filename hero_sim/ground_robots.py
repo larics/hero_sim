@@ -17,7 +17,8 @@ once the way is clear. The robots move one after another each tick, each
 against the others' current positions, so they never end up overlapping.
 
 This node also draws the scenario's pillars (its obstacles: list), latched on
-/hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter.
+/hero_sim/obstacles: one CYLINDER per pillar, at its x, y, scale.x = diameter,
+scale.z = height. (octomap.launch.py serves them as an octomap too.)
 """
 import math
 
@@ -34,7 +35,6 @@ from hero_sim.kinematics import GroundGoTo, integrate_ground, limit_ground_cmd, 
 
 FRAME = 'world'
 OBSTACLE_TOPIC = '/hero_sim/obstacles'
-PILLAR_HEIGHT = 2.0  # m, drawn only: pillars block at any height
 
 
 class _Robot:
@@ -108,17 +108,17 @@ class GroundRobotSim(Node):
         clear.header.frame_id = FRAME
         clear.action = Marker.DELETEALL
         markers = [clear]
-        for i, (x, y, radius) in enumerate(pillars):
+        for i, p in enumerate(pillars):  # config.Pillar; the height is drawn only
             m = Marker()
             m.header.frame_id = FRAME
             m.ns = 'obstacles'
             m.id = i
             m.type = Marker.CYLINDER
             m.action = Marker.ADD
-            m.pose.position.x, m.pose.position.y, m.pose.position.z = x, y, PILLAR_HEIGHT / 2.0
+            m.pose.position.x, m.pose.position.y, m.pose.position.z = p.x, p.y, p.height / 2.0
             m.pose.orientation.w = 1.0
-            m.scale.x = m.scale.y = 2.0 * radius
-            m.scale.z = PILLAR_HEIGHT
+            m.scale.x = m.scale.y = 2.0 * p.radius
+            m.scale.z = p.height
             m.color.r, m.color.g, m.color.b, m.color.a = 0.55, 0.45, 0.4, 1.0
             markers.append(m)
         self._pillar_pub.publish(MarkerArray(markers=markers))
