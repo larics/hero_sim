@@ -8,6 +8,7 @@ Panels:
         - /Grid1
         - /Axes1
         - /TF1
+        - /Obstacles1
         - /MarkerArray2
       Splitter Ratio: 0.5
     Tree Height: 1285
@@ -64,31 +65,9 @@ Visualization Manager:
         All Enabled: true
         cf_1:
           Value: true
-        cf_10:
-          Value: true
-        cf_11:
-          Value: true
-        cf_12:
-          Value: true
         cf_2:
           Value: true
-        cf_3:
-          Value: true
-        cf_4:
-          Value: true
-        cf_5:
-          Value: true
-        cf_6:
-          Value: true
-        cf_7:
-          Value: true
-        cf_8:
-          Value: true
-        cf_9:
-          Value: true
         herover_1:
-          Value: true
-        herover_2:
           Value: true
         scout_1:
           Value: true
@@ -103,31 +82,9 @@ Visualization Manager:
         world:
           cf_1:
             {}
-          cf_10:
-            {}
-          cf_11:
-            {}
-          cf_12:
-            {}
           cf_2:
             {}
-          cf_3:
-            {}
-          cf_4:
-            {}
-          cf_5:
-            {}
-          cf_6:
-            {}
-          cf_7:
-            {}
-          cf_8:
-            {}
-          cf_9:
-            {}
           herover_1:
-            {}
-          herover_2:
             {}
           scout_1:
             {}
@@ -152,7 +109,6 @@ Visualization Manager:
       Name: Grippers
       Namespaces:
         gripper: true
-        gripper_left: true
       Topic:
         Depth: 1
         Durability Policy: Transient Local
@@ -173,22 +129,22 @@ Visualization Manager:
         Value: /hero_sim/tether
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Obstacles
       Namespaces:
-        obstacles: true
+        {}
       Topic:
         Depth: 1
         Durability Policy: Transient Local
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /hero_sim/obstacles
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        perching_positions: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -200,7 +156,7 @@ Visualization Manager:
       Enabled: true
       Name: Docks
       Namespaces:
-        charging_docks: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -212,7 +168,7 @@ Visualization Manager:
       Enabled: true
       Name: MarkerArray
       Namespaces:
-        {}
+        map: true
       Topic:
         Depth: 5
         Durability Policy: Transient Local
@@ -224,7 +180,7 @@ Visualization Manager:
       Enabled: true
       Name: Marker
       Namespaces:
-        comm_edges: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile

@@ -62,8 +62,8 @@ sim:
 # as an octomap like a .bt map's. Also drawn as cylinders and published
 # latched on /hero_sim/obstacles.
 #   height: 2.0   how tall it is in RViz and the octomap (default 2.0); collisions ignore it
-# obstacles:
-#   - {x: 1.5, y: 1.5, radius: 0.35, height: 2.0}
+obstacles:
+  - {x: 1.5, y: 1.5, radius: 0.35, height: 2.0}
 
 # Optional: a winch drags an object across the floor with a tether through a
 # pulley on a ground robot and a ring on a Crazyflie (README "Tether task",
