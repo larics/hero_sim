@@ -6,16 +6,24 @@
 # Controls: /herover_<n>/cmd_vel (Twist, body frame) or /herover_<n>/go_to
 #           (crazyflie_interfaces/srv/GoTo). Feedback: /herover_<n>/pose,
 #           /hero_sim/obstacles. See README "Driving the robots" and "Obstacles".
+#
+# Robot size: in collisions each robot is a circle of its `radius` (m), the
+# only size the sim uses: against the pillar and against the other robot.
+# Without `radius:` it's the model's default (hero_sim/config.py
+# FOOTPRINT_RADII: herover 0.17, scout 0.42; no model 0.3). 0 turns its
+# collisions off. The RViz mesh keeps its real size whatever you set here.
 
 ground_robots:
   - name: herover_1
     pose: {x: -1.5, y: -1.5, yaw: 0.0}
     drive: omni
     model: herover
+    radius: 0.17                       # m, the herover default
   - name: herover_2
     pose: {x: -1.5, y: 1.5, yaw: 0.0}
     drive: omni
     model: herover
+    radius: 0.17                       # m, the herover default
 
 obstacles:                             # pillars: block both robots
   - {x: 1.5, y: 0.5, radius: 0.35}
