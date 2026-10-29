@@ -49,7 +49,7 @@ sim:
   rviz: true                 # RViz with config/sim.rviz
   models: true               # robot meshes in RViz (crazyflies, and ground robots with a model)
   # map: icuas26_1           # octomap: maps/<name>.bt, a path to a .bt, or null for none.
-                             # Default icuas26_1, but not with obstacles: (below), as here
+                             # Default icuas26_1; not together with obstacles: (below)
   collision: true            # robots and the tether object stop where their footprint
                              # would hit a map obstacle or a pillar (obstacles: below);
                              # ground robots also stop at each other
@@ -62,8 +62,8 @@ sim:
 # as an octomap like a .bt map's. Also drawn as cylinders and published
 # latched on /hero_sim/obstacles.
 #   height: 2.0   how tall it is in RViz and the octomap (default 2.0); collisions ignore it
-obstacles:
-  - {x: 1.5, y: 1.5, radius: 0.35, height: 2.0}
+# obstacles:
+#   - {x: 1.5, y: 1.5, radius: 0.35, height: 2.0}
 
 # Optional: a winch drags an object across the floor with a tether through a
 # pulley on a ground robot and a ring on a Crazyflie (README "Tether task",

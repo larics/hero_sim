@@ -64,12 +64,30 @@ ground_robots:
 crazyflies:                             # named cf_1, cf_2, ... in this order
   - pose: {x: 1.0, y: 0.0, z: 0.03}
 
-obstacles:                              # optional pillars, on an empty floor
+obstacles:                              # pillars instead of a map, see Maps below
   - {x: 2.0, y: 1.0, radius: 0.3}
-  - {x: 3.0, y: -1.0, radius: 0.2, height: 0.5}
 ```
 
-A scenario's world is either a map (`sim: {map: ...}`, an octomap `.bt` file, `icuas26_1` by default) or `obstacles:`, not both.
+## Maps
+
+What's in the world comes from one of two places:
+
+| | Set it with | In RViz |
+|---|---|---|
+| A map | `sim: {map: icuas26_1}`: a map from `maps/`, or the path to any octomap `.bt` file. `icuas26_1` is the default | occupied cells |
+| Pillars | an `obstacles:` list, on an empty floor | occupied cells, plus a cylinder for each pillar |
+
+A scenario uses one or the other: with `obstacles:` there's no map, and setting both is an error. For an empty floor with nothing on it, set `sim: {map: null}` and leave out `obstacles:`.
+
+```yaml
+obstacles:                              # m
+  - {x: 2.0, y: 1.0, radius: 0.3}
+  - {x: 3.0, y: -1.0, radius: 0.2, height: 0.5}   # height: how tall it is (2 m if left out)
+```
+
+The pillars are turned into an octomap, written to `/tmp/hero_sim/<scenario>_obstacles.bt`, and served just like a `.bt` map, with the same topics (`/octomap_binary`, `/projected_map`, ...). So RViz, and any code that reads the map, can't tell them apart. To keep a pillar map, copy that file and use it as `sim: {map: path/to/file.bt}` in another scenario.
+
+The map is drawn when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
 
 ## Moving the robots
 
@@ -120,8 +138,6 @@ A robot stops when it would hit something, and moves again once you command it a
 - the map's trunks and posts;
 - pillars, from the scenario's `obstacles:` list;
 - other ground robots.
-
-Pillars show up in RViz the same way a map does, as occupied cells, and also as cylinders. `height:` sets how tall a pillar is drawn (2 m if left out).
 
 Drones are blocked at any height, even above a short pillar: they have to fly around a trunk or a pillar, not over it. Drones don't collide with ground robots or with each other.
 
