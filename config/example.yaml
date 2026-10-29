@@ -58,8 +58,8 @@ sim:
 # Optional pillars (m): circles that block the robots (drones at any height)
 # and the tether object while sim.collision is on, with or without a map.
 # Drawn in RViz and published latched on /hero_sim/obstacles.
-# obstacles:
-#   - {x: 1.5, y: 0.5, radius: 0.35}
+obstacles:
+  - {x: 1.5, y: 0.5, radius: 0.35}
 
 # Optional: a winch drags an object across the floor with a tether through a
 # pulley on a ground robot and a ring on a Crazyflie (README "Tether task",

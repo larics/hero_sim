@@ -12,7 +12,7 @@
 #
 # Order: the argument, then an already-exported HERO_SIM_CONFIG, then
 # DEFAULT_CONFIG_NAME. Edit DEFAULT_CONFIG_NAME to change your day-to-day default.
-DEFAULT_CONFIG_NAME="test_branch.yaml"
+DEFAULT_CONFIG_NAME="test_perching_full2.yaml"
 
 _hero_sim_config_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/../config" && pwd)
 

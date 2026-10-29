@@ -1,0 +1,55 @@
+# test_perching_full2: 20 CFs on the floor, cf_1..cf_10 with a gripper, for
+# branches and platforms together (hero_mrs_ros2 scenario test_perching_full2:
+# branch and platform perches from the Blender generator, docks on scout_1
+# and both herovers). Layout from test_perching_full; all keys, and the sim:
+# block defaults, are documented in example.yaml.
+
+ground_robots:
+  - name: scout_1
+    pose: {x: 0.0, y: 0.0, z: 0.20, yaw: 0.0}
+    drive: omni
+    model: scout
+  - name: herover_1
+    pose: {x: 0.0, y: 0.6, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+  - name: herover_2
+    pose: {x: 0.5, y: 0.6, z: 0.080,  yaw: 0.0}
+    drive: omni
+    model: herover
+
+# Two rows of 10, 0.2 m apart, south of the scout and clear of the poles
+# at (+-1.5, +-1). The front row carries the grippers (gripper.enabled in
+# the stack's cf_1..cf_10.yaml); a gripper left on a branch is replaced on
+# a base dock.
+crazyflies:
+  - {pose: {x: -0.9, y: -0.55, z: 0.03}, gripper: true}     # cf_1
+  - {pose: {x: -0.7, y: -0.55, z: 0.03}, gripper: true}     # cf_2
+  - {pose: {x: -0.5, y: -0.55, z: 0.03}, gripper: true}     # cf_3
+  - {pose: {x: -0.3, y: -0.55, z: 0.03}, gripper: true}     # cf_4
+  - {pose: {x: -0.1, y: -0.55, z: 0.03}, gripper: true}     # cf_5
+  - {pose: {x: 0.1, y: -0.55, z: 0.03}, gripper: true}      # cf_6
+  - {pose: {x: 0.3, y: -0.55, z: 0.03}, gripper: true}      # cf_7
+  - {pose: {x: 0.5, y: -0.55, z: 0.03}, gripper: true}      # cf_8
+  - {pose: {x: 0.7, y: -0.55, z: 0.03}, gripper: true}      # cf_9
+  - {pose: {x: 0.9, y: -0.55, z: 0.03}, gripper: true}      # cf_10
+  - pose: {x: -0.9, y: -0.8, z: 0.03}       # cf_11
+  - pose: {x: -0.7, y: -0.8, z: 0.03}       # cf_12
+  - pose: {x: -0.5, y: -0.8, z: 0.03}       # cf_13
+  - pose: {x: -0.3, y: -0.8, z: 0.03}       # cf_14
+  - pose: {x: -0.1, y: -0.8, z: 0.03}       # cf_15
+  - pose: {x: 0.1, y: -0.8, z: 0.03}        # cf_16
+  - pose: {x: 0.3, y: -0.8, z: 0.03}        # cf_17
+  - pose: {x: 0.5, y: -0.8, z: 0.03}        # cf_18
+  - pose: {x: 0.7, y: -0.8, z: 0.03}        # cf_19
+  - pose: {x: 0.9, y: -0.8, z: 0.03}        # cf_20
+
+sim:
+  models: true        # grippers are drawn only with the robot meshes
+  # The generator's map for this world (poles only: branches and platforms
+  # are not in the .bt).
+  map: /root/ros2_ws/src/hero_mrs_control_stack/hero_mrs_ros2/worlds/perch3_world.bt
+  # Off: a perch approach flies straight with obstacle avoidance off, and
+  # hero_sim stops a drone at a trunk at any altitude. Perch paths are now
+  # checked for clearance, so this could be turned on to catch a regression.
+  collision: false

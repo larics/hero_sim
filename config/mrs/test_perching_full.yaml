@@ -1,0 +1,47 @@
+# test_perching_full: 20 CFs on the floor for the platform-swap stress test
+# (hero_mrs_ros2 scenario test_perching_full: 16 platforms, no docks).
+# Layout from test_deploy_2; all keys, and the sim: block defaults, are
+# documented in example.yaml.
+
+ground_robots:
+  - name: scout_1
+    pose: {x: 0.0, y: 0.0, yaw: 0.0}
+    drive: omni
+    model: scout
+  - name: herover_1
+    pose: {x: 0.0, y: 0.6, yaw: 0.0}
+    drive: omni
+    model: herover
+
+# Two rows of 10, 0.2 m apart, south of the scout and clear of the poles
+# at (+-1.5, +-1) and their platforms.
+crazyflies:
+  - pose: {x: -0.9, y: -0.55, z: 0.03}      # cf_1
+  - pose: {x: -0.7, y: -0.55, z: 0.03}      # cf_2
+  - pose: {x: -0.5, y: -0.55, z: 0.03}      # cf_3
+  - pose: {x: -0.3, y: -0.55, z: 0.03}      # cf_4
+  - pose: {x: -0.1, y: -0.55, z: 0.03}      # cf_5
+  - pose: {x: 0.1, y: -0.55, z: 0.03}       # cf_6
+  - pose: {x: 0.3, y: -0.55, z: 0.03}       # cf_7
+  - pose: {x: 0.5, y: -0.55, z: 0.03}       # cf_8
+  - pose: {x: 0.7, y: -0.55, z: 0.03}       # cf_9
+  - pose: {x: 0.9, y: -0.55, z: 0.03}       # cf_10
+  - pose: {x: -0.9, y: -0.8, z: 0.03}       # cf_11
+  - pose: {x: -0.7, y: -0.8, z: 0.03}       # cf_12
+  - pose: {x: -0.5, y: -0.8, z: 0.03}       # cf_13
+  - pose: {x: -0.3, y: -0.8, z: 0.03}       # cf_14
+  - pose: {x: -0.1, y: -0.8, z: 0.03}       # cf_15
+  - pose: {x: 0.1, y: -0.8, z: 0.03}        # cf_16
+  - pose: {x: 0.3, y: -0.8, z: 0.03}        # cf_17
+  - pose: {x: 0.5, y: -0.8, z: 0.03}        # cf_18
+  - pose: {x: 0.7, y: -0.8, z: 0.03}        # cf_19
+  - pose: {x: 0.9, y: -0.8, z: 0.03}        # cf_20
+
+sim:
+  models: true        # 20 CF meshes slow RViz down (test_many does the same)
+  # The perch world's poles (the platforms are not in the .bt).
+  map: /root/ros2_ws/src/hero_mrs_control_stack/hero_mrs_ros2/worlds/perch2_world.bt
+  # Off: a perch approach flies straight with obstacle avoidance off, and
+  # hero_sim stops a drone at a trunk at any altitude, so a CF whose line to
+  # its platform crosses a pole would sit there. Turn on to see which do.
+  collision: false

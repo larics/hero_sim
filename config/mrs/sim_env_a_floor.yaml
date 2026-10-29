@@ -1,0 +1,43 @@
+# sim_env_a: Env A of the simulation experiments — 4 x 4 m working area on a
+# 5 x 5 m floor, scout_1 as the base in the (-x, -y) corner, 2 herovers with a
+# dock each, 8 perch poles,
+# 8 gripper CFs (hero_mrs_ros2 scenario sim_env_a; world from the stack's
+# sim_experiments/worlds/make_sim_env_a.py). All keys, and the sim: block
+# defaults, are documented in example.yaml.
+ground_robots:
+  - name: scout_1
+    pose: {x: -1.4, y: -1.4, z: 0.20, yaw: 0.0}
+    drive: omni
+    model: scout
+  - name: herover_1
+    pose: {x: -0.5, y: -1.4, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+  - name: herover_2
+    pose: {x: -1.4, y: -0.5, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+# Floor start, for the stack's E1 conditions without docks (overlays
+# e1_no_dock, e1_bare): every CF starts on the floor next to the base,
+# none on a dock. Otherwise identical to sim_env_a.yaml.
+# radius 0.07: a Crazyflie 2.1's real reach (motors 46 mm out + 22.5 mm props).
+# The 0.10 default doesn't fit: the pads and branches facing 137.5 deg are
+# 0.091 m from their voxelised pole, so collision would stop a CF 1 cm short.
+crazyflies:
+  - {pose: {x: -1.85, y: -1.0, z: 0.03}, gripper: true, radius: 0.07}   # cf_1, floor
+  - {pose: {x: -1.85, y: -0.25, z: 0.03}, gripper: true, radius: 0.07}   # cf_2, floor
+  - {pose: {x: -1.0, y: -1.85, z: 0.03}, gripper: true, radius: 0.07}   # cf_3, floor
+  - {pose: {x: -0.75, y: -1.85, z: 0.03}, gripper: true, radius: 0.07}   # cf_4, floor
+  - {pose: {x: -0.5, y: -1.85, z: 0.03}, gripper: true, radius: 0.07}   # cf_5, floor
+  - {pose: {x: -0.25, y: -1.85, z: 0.03}, gripper: true, radius: 0.07}   # cf_6, floor
+  - {pose: {x: -1.85, y: -0.75, z: 0.03}, gripper: true, radius: 0.07}           # cf_7
+  - {pose: {x: -1.85, y: -0.5, z: 0.03}, gripper: true, radius: 0.07}            # cf_8
+sim:
+  rviz: false         # data runs; true to watch a pilot
+  models: false       # meshes and grippers in RViz; true together with rviz
+  map: /root/ros2_ws/src/hero_mrs_control_stack/hero_mrs_ros2/worlds/sim_env_a.bt
+  # Off since 2026-10-26 (P3e): a stop at a pole has no sliding along it, so a
+  # herover pushed against a pole froze there for up to 30 s. Robots now pass
+  # through poles; contacts are counted from the tracks instead.
+  # Platforms and branches aren't in the map, only the poles.
+  collision: false

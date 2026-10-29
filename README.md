@@ -135,6 +135,10 @@ ros2 topic echo --once /hero_sim/obstacles
 
 Get an object into a goal circle on the floor. A tether runs from a fixed winch, through a pulley on a ground robot (UGV), through a ring on a Crazyflie (UAV), and down to the object.
 
+<p align="center">
+  <img src="media/tether_demo.png" width="800">
+</p>
+
 ```bash
 bash start.sh tether_demo.yaml
 ```
