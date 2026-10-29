@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -167,9 +169,53 @@ def test_resolve_map_disabled_and_path(tmp_path):
     assert config.resolve_map(str(bt)) == str(bt)
 
 
-@pytest.mark.parametrize('path', sorted(CONFIG_DIR.glob('*.yaml')), ids=lambda p: p.name)
+SHIPPED = sorted(CONFIG_DIR.rglob('*.yaml'))
+
+
+@pytest.mark.parametrize('path', SHIPPED, ids=lambda p: str(p.relative_to(CONFIG_DIR)))
 def test_shipped_configs_load(path):
     config.load(path)
+
+
+def test_shipped_config_names_are_unique_across_folders():
+    names = [p.name for p in SHIPPED]
+    assert sorted({n for n in names if names.count(n) > 1}) == []
+    assert any(p.parent != CONFIG_DIR for p in SHIPPED)  # the folders are searched at all
+
+
+@pytest.fixture()
+def config_tree(tmp_path):
+    """config/ with a.yaml on top, tether/b.yaml, and dup.yaml in two folders."""
+    root = tmp_path / 'config'
+    for rel in ('a.yaml', 'tether/b.yaml', 'mrs/dup.yaml', 'tether/dup.yaml'):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text('{}\n')
+    return root
+
+
+def test_find_config_by_name_in_any_folder(config_tree):
+    assert config.find_config('a.yaml', config_tree) == config_tree / 'a.yaml'
+    assert config.find_config('b.yaml', config_tree) == config_tree / 'tether' / 'b.yaml'
+    assert config.find_config('tether/b.yaml', config_tree) == config_tree / 'tether' / 'b.yaml'
+    assert config.find_config('mrs/dup.yaml', config_tree) == config_tree / 'mrs' / 'dup.yaml'
+
+
+def test_find_config_prefers_an_existing_path(config_tree, tmp_path, monkeypatch):
+    (tmp_path / 'tether').mkdir()
+    (tmp_path / 'tether' / 'b.yaml').write_text('{}\n')
+    monkeypatch.chdir(tmp_path)
+    assert config.find_config('tether/b.yaml', config_tree) == Path('tether/b.yaml')
+    assert config.find_config(str(tmp_path / 'config' / 'a.yaml'), config_tree).is_file()
+
+
+def test_find_config_errors(config_tree):
+    with pytest.raises(ValueError, match=r'dup.yaml is in more than one folder: mrs/dup.yaml, '
+                                         r'tether/dup.yaml'):
+        config.find_config('dup.yaml', config_tree)
+    with pytest.raises(FileNotFoundError, match='nope.yaml'):
+        config.find_config('nope.yaml', config_tree)
+    with pytest.raises(FileNotFoundError, match='mrs/b.yaml'):
+        config.find_config('mrs/b.yaml', config_tree)  # wrong folder
 
 
 TETHER_ROBOTS = 'ground_robots: [{name: g1}, {name: g2}]\ncrazyflies: [{pose: {}}, {pose: {}}]\n'

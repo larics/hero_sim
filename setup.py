@@ -5,6 +5,14 @@ from setuptools import find_packages, setup
 
 package_name = 'hero_sim'
 
+# Scenario configs: config/*.yaml and its folders, layout kept (config.find_config). isfile
+# skips broken links a --symlink-install build keeps to configs that moved or were deleted.
+configs = [f for f in glob('config/**/*.yaml', recursive=True) if os.path.isfile(f)]
+config_files = [
+    (f'share/{package_name}/{d}', sorted(f for f in configs if os.path.dirname(f) == d))
+    for d in sorted({os.path.dirname(f) for f in configs})
+]
+
 # RViz meshes: models/<name>/*.{dae,glb,stl}. models/source/ (raw files) is not installed.
 model_files = [
     (f'share/{package_name}/{d}', [f for ext in ('dae', 'glb', 'stl') for f in glob(f'{d}/*.{ext}')])
@@ -19,7 +27,8 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        ('share/' + package_name + '/config', glob('config/*.yaml') + glob('config/*.rviz')),
+        ('share/' + package_name + '/config', glob('config/*.rviz')),
+        *config_files,
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/maps', glob('maps/*.bt')),
         *model_files,

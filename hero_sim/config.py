@@ -303,17 +303,45 @@ def share_dir():
     return Path(get_package_share_directory('hero_sim'))
 
 
+def find_config(arg, root):
+    """The scenario file `arg` names, under the config dir `root` (startup/_setup.sh does the same).
+
+    Configs sit in root or in folders below it (config/tether/, config/mrs/):
+      tether_demo.yaml         a bare filename, searched in root and every folder below.
+                               Filenames are unique across folders; two matches raise
+      tether/tether_demo.yaml  with a '/': a path if that file exists, else relative to root
+    """
+    root = Path(root)
+    if '/' in arg:
+        for path in (Path(arg), root / arg):
+            if path.is_file():
+                return path
+        raise FileNotFoundError(f'hero_sim config not found: {arg} (as a path or under {root})')
+    matches = sorted(p for p in root.rglob(arg) if p.is_file())
+    if len(matches) > 1:
+        names = ', '.join(str(p.relative_to(root)) for p in matches)
+        raise ValueError(f'hero_sim config {arg} is in more than one folder: {names}; '
+                         'name the folder too, e.g. tether/tether_demo.yaml. If a config '
+                         'moved, the install may still hold its old copy: remove '
+                         'build/hero_sim and install/hero_sim and rebuild')
+    if not matches:
+        raise FileNotFoundError(f'hero_sim config not found: {arg} (searched {root})')
+    return matches[0]
+
+
 def resolve_config(arg=''):
     """Turn a config argument into an existing file path.
 
-    Empty falls back to $HERO_SIM_CONFIG, then DEFAULT_CONFIG. A bare filename
-    is looked up in the package's config/ dir; anything with a '/' is a path.
+    Empty falls back to $HERO_SIM_CONFIG, then DEFAULT_CONFIG. Names are found
+    in the package's config/ dir and its folders (find_config); anything
+    else with a '/' is a path.
     """
     arg = arg or os.environ.get(CONFIG_ENV, '') or DEFAULT_CONFIG
-    path = Path(arg) if '/' in arg else share_dir() / 'config' / arg
-    if not path.is_file():
-        raise FileNotFoundError(f'hero_sim config not found: {path}')
-    return str(path.resolve())
+    if Path(arg).is_absolute():  # a path: no package lookup, so no sourced ROS env needed
+        if not Path(arg).is_file():
+            raise FileNotFoundError(f'hero_sim config not found: {arg}')
+        return str(Path(arg).resolve())
+    return str(find_config(arg, share_dir() / 'config').resolve())
 
 
 def resolve_map(value):

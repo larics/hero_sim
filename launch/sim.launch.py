@@ -51,6 +51,6 @@ def _actions(context):
 def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('config', default_value='',
-                              description='Scenario YAML: a name in config/ or a path'),
+                              description='Scenario YAML: a name in config/ or its folders, or a path'),
         OpaqueFunction(function=_actions),
     ])

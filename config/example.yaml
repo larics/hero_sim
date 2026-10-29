@@ -63,7 +63,7 @@ sim:
 
 # Optional: a winch drags an object across the floor with a tether through a
 # pulley on a ground robot and a ring on a Crazyflie (README "Tether task",
-# config/tether_demo.yaml). Leave it out and nothing extra runs.
+# config/tether/tether_demo.yaml). Leave it out and nothing extra runs.
 # tether:
 #   winch: {x: -3.0, y: 0.0, z: 0.3}    # m, x and y required; z: where the tether leaves the drum
 #   ugv: scout_1                         # pulley on its deck (default: the first ground robot)

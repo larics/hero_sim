@@ -34,7 +34,8 @@ Optional: if `hero_mrs_msgs` (from hero_mrs_control_stack) is also in the worksp
 cd ~/ros2_ws/src/hero_sim/startup
 
 bash start.sh                    # default config
-bash start.sh test_many.yaml     # a config from config/
+bash start.sh test_many.yaml     # a config from config/, found in whichever folder it's in
+bash start.sh mrs/test_many.yaml # the same, naming its folder
 bash start.sh /path/to/my.yaml   # any config file
 
 tmux kill-session -t hero_sim    # stop
@@ -47,6 +48,16 @@ To change the default config, edit `DEFAULT_CONFIG_NAME` at the top of `startup/
 ## Config
 
 One YAML file per scenario in `config/`. To make a new one, copy `config/example.yaml`, which explains every option.
+
+Scenarios can sit in `config/` itself or in a folder inside it:
+
+| Folder | Scenarios |
+|---|---|
+| `config/tether/` | the tether task (`tether:` section) |
+| `config/mrs/` | the control stack's, with Crazyflies |
+| `config/` | everything else: the example, ground-robot-only setups |
+
+A config is named by its filename alone (`test_many.yaml`) and found in whichever folder it's in, so filenames must be unique across folders. You can also name the folder (`mrs/test_many.yaml`) or give a path. New folders work without code changes; rebuild the package (`colcon build`) after adding or moving files.
 
 ```yaml
 ground_robots:
@@ -158,7 +169,7 @@ ros2 topic echo --once /hero_sim/obstacles
 
 ## Tether task
 
-A winch drags an object across the floor. The tether runs from the winch, through a pulley on a ground robot (UGV), through a ring on a Crazyflie (UAV), down to the object. A scenario sets it up with a `tether:` section; `config/tether_demo.yaml` is a ready one:
+A winch drags an object across the floor. The tether runs from the winch, through a pulley on a ground robot (UGV), through a ring on a Crazyflie (UAV), down to the object. A scenario sets it up with a `tether:` section; `config/tether/tether_demo.yaml` is a ready one:
 
 ```bash
 bash start.sh tether_demo.yaml
