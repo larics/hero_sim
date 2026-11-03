@@ -15,7 +15,7 @@ You need the `icuas26_finals` docker container. Run every command in this README
 1. Get the code into your workspace:
    ```bash
    cd ~/ros2_ws/src
-   git clone https://github.com/KhAlamdar11/hero_sim.git
+   git clone https://github.com/larics/hero_sim.git
    ```
 2. Build it, together with the Crazyflie messages it needs:
    ```bash
@@ -201,9 +201,6 @@ The `tether:` section of `config/tether/tether_demo.yaml` sets where the winch, 
 | `ros2 launch` doesn't find a config you just added | Build again. `start.sh` finds new files without a rebuild |
 | A robot doesn't move | It may be pressed against an obstacle: command it away. Check that the simulator is running: `ros2 node list` |
 | A `go_to` stops right away | Something keeps publishing `cmd_vel` to that robot, such as a `ros2 topic pub` without `--once` |
-
-## For hero_mrs_control_stack users
-
 - With `hero_mrs_msgs` in the workspace, `/sim/attach_agent` starts: robots carry docked Crazyflies, and an empty `parent_id` locks a Crazyflie in place (perched on a branch).
 - `gripper: true` on a Crazyflie draws a two-claw gripper. To fit a new one: `ros2 service call /sim/cf_1/add_gripper std_srvs/srv/Trigger`.
 - `sim: {models: false}` hides the robot models in RViz. The mesh tools are described in [models/README.md](models/README.md).
