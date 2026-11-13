@@ -93,6 +93,8 @@ The map is drawn when you start with `start.sh`. Both kinds block the robots, se
 
 Every robot's pose is on `/<name>/pose` (`geometry_msgs/PoseStamped`, in the `world` frame) and on TF.
 
+`/<name>/odom` (`nav_msgs/Odometry`) has the same pose plus the robot's velocity in its own frame (`linear.x` is forward, `angular.z` is the yaw rate). It is how the robot really moved, not what it was told, so it reads 0 while an obstacle blocks the robot.
+
 ### Ground robots
 
 | Name | Type | |

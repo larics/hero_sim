@@ -196,6 +196,51 @@ def test_update_returns_world_transform(cf):
             t.transform.translation.z) == (1.0, 2.0, 3.0)
 
 
+class _Capture:
+    def __init__(self):
+        self.msgs = []
+
+    def publish(self, msg):
+        self.msgs.append(msg)
+
+
+def _twist(odom):
+    v = odom.twist.twist
+    return v.linear.x, v.linear.y, v.linear.z, v.angular.z
+
+
+def test_odom_takeoff_climb(cf):
+    cf.odom_pub = odom = _Capture()
+    takeoff(cf, height=1.0, sec=2)
+    cf.update()
+    assert _twist(odom.msgs[-1]) == pytest.approx((0.0, 0.0, 0.5, 0.0))
+    assert (odom.msgs[-1].header.frame_id, odom.msgs[-1].child_frame_id) == ('world', 'cf_test')
+    assert odom.msgs[-1].pose.pose.position.z == pytest.approx(0.05)
+
+
+def test_odom_teleport_reads_zero_then_hover_in_the_drone_frame(cf):
+    cf.odom_pub = odom = _Capture()
+    cf._set_position_cb(GoTo.Request(goal=Point(x=5.0, y=5.0, z=0.5), yaw=np.pi / 2),
+                        GoTo.Response())
+    cf.update()
+    assert _twist(odom.msgs[-1]) == (0.0, 0.0, 0.0, 0.0)
+    assert odom.msgs[-1].pose.pose.position.x == 5.0
+
+    cf._cmd_hover_cb(Hover(vx=1.0, vy=0.0, yaw_rate=0.5, z_distance=0.5))
+    run(cf, 3)
+    assert _twist(odom.msgs[-1]) == pytest.approx((1.0, 0.0, 0.0, 0.5))
+
+
+def test_odom_averages_setpoints_faster_than_the_tick(cf):
+    """sim_attach streams cmd_position at 50 Hz to a drone riding on a ground robot."""
+    cf.odom_pub = odom = _Capture()
+    cf._set_position_cb(GoTo.Request(goal=Point(), yaw=np.pi / 2), GoTo.Response())  # face +y
+    for i in range(1, 6):  # one 0.1 s tick of setpoints moving +y at 1 m/s
+        cf._cmd_position_cb(Position(x=0.0, y=0.02 * i, z=0.0, yaw=np.pi / 2))
+    cf.update()
+    assert _twist(odom.msgs[-1]) == pytest.approx((1.0, 0.0, 0.0, 0.0))  # +y is ahead
+
+
 @pytest.fixture()
 def walled_cf(node):
     """Drone at the origin with a wall 1 m ahead in +x (conftest.wall_map)."""

@@ -42,6 +42,20 @@ def integrate_ground(x, y, yaw, vx, vy, wz, dt):
     return x, y, wrap_angle(yaw + wz * dt)
 
 
+def body_velocity(prev, cur, dt):
+    """Body-frame velocity (vx, vy, vz, wz) that moved a pose from `prev` to `cur` in dt.
+
+    Poses are (x, y, z, yaw) in the world frame. The step is rotated into the
+    frame `prev` faced, as integrate_ground applies a velocity, so it gives
+    back the velocity that integrate_ground was given.
+    """
+    x0, y0, z0, yaw0 = prev
+    x1, y1, z1, yaw1 = cur
+    c, s = math.cos(yaw0), math.sin(yaw0)
+    wx, wy = (x1 - x0) / dt, (y1 - y0) / dt
+    return wx * c + wy * s, -wx * s + wy * c, (z1 - z0) / dt, wrap_angle(yaw1 - yaw0) / dt
+
+
 class GroundGoTo:
     """A ground robot's go_to: from `start` to `goal` (x, y, yaw), within the speed limits.
 

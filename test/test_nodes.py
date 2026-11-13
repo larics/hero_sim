@@ -10,6 +10,7 @@ from conftest import duration  # noqa: E402
 from crazyflie_interfaces.srv import Arm, GoTo, Takeoff  # noqa: E402
 from std_srvs.srv import Trigger  # noqa: E402
 from geometry_msgs.msg import Point, PoseStamped, Twist  # noqa: E402
+from nav_msgs.msg import Odometry  # noqa: E402
 
 from hero_sim import config  # noqa: E402
 from hero_sim.kinematics import yaw_to_quat  # noqa: E402
@@ -98,24 +99,64 @@ def test_ground_robots_integrate_cmd_vel(make):
     assert (scout.x, scout.y) == pytest.approx((0.0, 1.0))
 
 
-def test_ground_robots_publish_pose(make):
+def test_ground_robots_publish_pose_and_odom(make):
     from hero_sim.ground_robots import GroundRobotSim
     sim = make(GroundRobotSim)
-    got = []
+    got, odom = [], []
     sub_node = make(lambda: rclpy.create_node('pose_listener'))
     sub_node.create_subscription(PoseStamped, '/scout_1/pose', got.append, 10)
+    sub_node.create_subscription(Odometry, '/scout_1/odom', odom.append, 10)
     executor = rclpy.executors.SingleThreadedExecutor()
     executor.add_node(sim)
     executor.add_node(sub_node)
     for _ in range(50):
         executor.spin_once(timeout_sec=0.05)
-        if got:
+        if got and odom:
             break
     executor.shutdown()
     assert got, 'no pose received on /scout_1/pose'
     assert got[-1].header.frame_id == 'world'
     assert got[-1].pose.position.x == pytest.approx(1.0)
     assert got[-1].pose.position.z == pytest.approx(config.MARKER_HEIGHTS['scout'])
+    assert odom, 'no odometry received on /scout_1/odom'
+    assert (odom[-1].header.frame_id, odom[-1].child_frame_id) == ('world', 'scout_1')
+    assert odom[-1].pose.pose == got[-1].pose
+    assert _twist(odom[-1]) == (0.0, 0.0, 0.0, 0.0)
+
+
+def _twist(odom):
+    v = odom.twist.twist
+    return v.linear.x, v.linear.y, v.linear.z, v.angular.z
+
+
+def test_ground_odom_velocity_in_the_robot_frame(make):
+    from hero_sim.ground_robots import GroundRobotSim
+    sim = make(GroundRobotSim)
+    scout, herover = sim._robots
+    scout.odom_pub, herover.odom_pub = scout_odom, herover_odom = _Capture(), _Capture()
+    sim._on_cmd_vel(scout, twist(vx=1.0, vy=1.0))  # scout faces +y: world -x, +y
+    sim._on_cmd_vel(herover, twist(vx=1.0, wz=9.0))
+    for _ in range(3):
+        sim._tick()
+    assert _twist(scout_odom.msgs[-1]) == pytest.approx((1.0, 1.0, 0.0, 0.0))
+    assert _twist(herover_odom.msgs[-1]) == pytest.approx((1.0, 0.0, 0.0, 2.0))  # clamped wz
+    odom = scout_odom.msgs[-1]
+    assert (odom.pose.pose.position.x, odom.pose.pose.position.y) == (scout.x, scout.y)
+
+
+def test_ground_odom_reads_zero_when_blocked(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    scenario_file(PILLAR_SCENARIO)
+    sim = make(GroundRobotSim)
+    robot = sim._robots[0]
+    robot.odom_pub = odom = _Capture()
+    sim._on_cmd_vel(robot, twist(vx=1.0))
+    sim._tick()
+    assert _twist(odom.msgs[-1]) == pytest.approx((1.0, 0.0, 0.0, 0.0))
+    for _ in range(20):
+        sim._tick()
+    # Still commanded at 1 m/s, but stopped at the pillar
+    assert _twist(odom.msgs[-1]) == pytest.approx((0.0, 0.0, 0.0, 0.0), abs=1e-9)
 
 
 def test_ground_robots_stop_at_map_obstacles(make, scenario_file):
@@ -270,6 +311,15 @@ def test_ground_go_to_stops_at_a_pillar(ground):
     assert omni.go_to is not None  # past its 5 s, still waiting for the way to clear
     ground._on_cmd_vel(omni, twist())
     assert omni.go_to is None
+
+
+def test_ground_odom_during_a_go_to(ground):
+    omni, _ = ground._robots
+    omni.odom_pub = odom = _Capture()
+    ground._on_go_to(omni, go_to(2.0, 0.0), GoTo.Response())  # held to 1 m/s
+    for _ in range(5):
+        ground._tick()
+    assert _twist(odom.msgs[-1]) == pytest.approx((1.0, 0.0, 0.0, 0.0))
 
 
 def test_ground_go_to_service_call(ground, make):

@@ -3,7 +3,8 @@ import math
 import pytest
 
 from hero_sim.kinematics import (
-    GroundGoTo, integrate_ground, limit_ground_cmd, quat_to_yaw, wrap_angle, yaw_to_quat,
+    body_velocity, GroundGoTo, integrate_ground, limit_ground_cmd, quat_to_yaw, wrap_angle,
+    yaw_to_quat,
 )
 
 
@@ -102,3 +103,15 @@ def test_go_to_nowhere_is_done_at_once():
     g = GroundGoTo((1.0, 2.0, 0.5), (1.0, 2.0, 0.5), 'omni', 0.0, 2.0, 2.0)
     assert g.total == 0.0
     assert g.at(0.0) == pytest.approx((1.0, 2.0, 0.5))
+
+
+@pytest.mark.parametrize('yaw', [0.0, 1.0, -2.5, 3.1])
+def test_body_velocity_inverts_integrate_ground(yaw):
+    x, y, new_yaw = integrate_ground(1.0, 2.0, yaw, 0.7, -0.3, 1.5, 0.02)
+    assert body_velocity((1.0, 2.0, 0.4, yaw), (x, y, 0.5, new_yaw), 0.02) == pytest.approx(
+        (0.7, -0.3, 5.0, 1.5))
+
+
+def test_body_velocity_turns_the_short_way_across_pi():
+    *_, wz = body_velocity((0.0, 0.0, 0.0, 3.1), (0.0, 0.0, 0.0, -3.1), 0.1)
+    assert wz == pytest.approx((2 * math.pi - 6.2) / 0.1)

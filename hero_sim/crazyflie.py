@@ -4,10 +4,11 @@ from crazyflie_interfaces.srv import (
     Arm, GoTo, Land, NotifySetpointsStop, StartTrajectory, Takeoff, UploadTrajectory,
 )
 from geometry_msgs.msg import PoseStamped, Quaternion, Twist, TransformStamped
+from nav_msgs.msg import Odometry
 import numpy as np
 from rclpy.node import Node
 
-from hero_sim.kinematics import quat_to_yaw, wrap_angle, yaw_to_quat
+from hero_sim.kinematics import body_velocity, quat_to_yaw, wrap_angle, yaw_to_quat
 
 
 class SimCrazyflie:
@@ -23,6 +24,11 @@ class SimCrazyflie:
     With an ObstacleMap (hero_sim/obstacles.py), every source's horizontal
     motion stops where the footprint of `radius` would hit an obstacle; height
     changes always go through. set_position teleports without a check.
+
+    Every tick publishes /<name>/pose and /<name>/odom (nav_msgs/Odometry,
+    frame `frame`, child frame <name>): the pose, plus the velocity the drone
+    actually moved at since the last tick, in its own frame. Whatever moved
+    it (a go_to, setpoints, a ride on a ground robot); a teleport reads 0.
     """
 
     # Supervisor info bits (crazyflie_interfaces/msg/Status)
@@ -52,6 +58,7 @@ class SimCrazyflie:
         self.position = np.array(initial_position, dtype=float)
         self.yaw = 0.0
         self._checked_xy = tuple(self.position[:2])  # x, y the obstacle check last let through
+        self._published = self._pose()  # x, y, z, yaw last published; odom's velocity is from it
 
         # High-level motion (linear interpolation start -> goal)
         self.start_position = self.position.copy()
@@ -79,6 +86,7 @@ class SimCrazyflie:
         self.trajectories = {}  # id -> pieces; stored, not flown
 
         self.pose_pub = node.create_publisher(PoseStamped, f'/{name}/pose', 10)
+        self.odom_pub = node.create_publisher(Odometry, f'/{name}/odom', 10)
         self.status_pub = node.create_publisher(Status, f'/{name}/status', 10)
 
         node.create_service(Takeoff, f'/{name}/takeoff', self._takeoff_cb)
@@ -170,10 +178,14 @@ class SimCrazyflie:
         self.position[0], self.position[1] = x, y
         self._checked_xy = (x, y)
 
+    def _pose(self):
+        x, y, z = (float(v) for v in self.position)
+        return x, y, z, float(self.yaw)
+
     def _publish_pose(self):
         stamp = self.node.get_clock().now().to_msg()
-        x, y, z = (float(v) for v in self.position)
-        qx, qy, qz, qw = yaw_to_quat(self.yaw)
+        x, y, z, yaw = current = self._pose()
+        qx, qy, qz, qw = yaw_to_quat(yaw)
         q = Quaternion(x=qx, y=qy, z=qz, w=qw)
 
         pose = PoseStamped()
@@ -182,6 +194,16 @@ class SimCrazyflie:
         pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = x, y, z
         pose.pose.orientation = q
         self.pose_pub.publish(pose)
+
+        odom = Odometry()
+        odom.header = pose.header
+        odom.child_frame_id = self.name
+        odom.pose.pose = pose.pose
+        v = odom.twist.twist
+        v.linear.x, v.linear.y, v.linear.z, v.angular.z = body_velocity(
+            self._published, current, self.dt)
+        self.odom_pub.publish(odom)
+        self._published = current
 
         t = TransformStamped()
         t.header.stamp = stamp
@@ -298,6 +320,7 @@ class SimCrazyflie:
         self.position = np.array([request.goal.x, request.goal.y, request.goal.z])
         self.yaw = request.yaw
         self._checked_xy = (request.goal.x, request.goal.y)  # a teleport skips the path check
+        self._published = self._pose()  # nor does odom count it as motion
         self.goal = self.position.copy()
         self.start_position = self.position.copy()
         self.motion_active = False

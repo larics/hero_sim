@@ -1,9 +1,13 @@
-"""Kinematic ground robots: integrate /<name>/cmd_vel, publish /<name>/pose and TF.
+"""Kinematic ground robots: integrate /<name>/cmd_vel, publish /<name>/pose, odom and TF.
 
 cmd_vel is a body-frame Twist held until the next message. omni robots honor
 linear.x, linear.y and angular.z; diff robots ignore linear.y. Poses are
 published in 'world' at the robot's pose z (its marker height, see
 config.MARKER_HEIGHTS), along with a world -> <name> transform.
+
+/<name>/odom (nav_msgs/Odometry, frame 'world', child frame <name>) carries
+the same pose plus the velocity the robot actually moved at over the last
+tick, in its own frame: 0 while blocked, the go_to's speed during a go_to.
 
 /<name>/go_to (crazyflie_interfaces/srv/GoTo, as for the Crazyflies) drives
 to goal x, y and yaw in `duration`, or slower to stay within the speed limits
@@ -24,6 +28,7 @@ import math
 
 from crazyflie_interfaces.srv import GoTo
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist
+from nav_msgs.msg import Odometry
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
@@ -31,7 +36,9 @@ from tf2_ros import TransformBroadcaster
 from visualization_msgs.msg import Marker, MarkerArray
 
 from hero_sim import config, obstacles
-from hero_sim.kinematics import GroundGoTo, integrate_ground, limit_ground_cmd, yaw_to_quat
+from hero_sim.kinematics import (
+    body_velocity, GroundGoTo, integrate_ground, limit_ground_cmd, yaw_to_quat,
+)
 
 FRAME = 'world'
 OBSTACLE_TOPIC = '/hero_sim/obstacles'
@@ -39,15 +46,16 @@ OBSTACLE_TOPIC = '/hero_sim/obstacles'
 
 class _Robot:
     __slots__ = ('name', 'drive', 'radius', 'x', 'y', 'z', 'yaw', 'vx', 'vy', 'wz', 'pose_pub',
-                 'go_to', 'go_to_t')
+                 'odom_pub', 'go_to', 'go_to_t')
 
-    def __init__(self, spec, pose_pub):
+    def __init__(self, spec, pose_pub, odom_pub):
         self.name = spec.name
         self.drive = spec.drive
         self.radius = spec.radius
         self.x, self.y, self.z, self.yaw = spec.x, spec.y, spec.z, spec.yaw
         self.vx = self.vy = self.wz = 0.0
         self.pose_pub = pose_pub
+        self.odom_pub = odom_pub
         self.go_to = None  # GroundGoTo while one runs
         self.go_to_t = 0.0  # s into it
 
@@ -68,7 +76,8 @@ class GroundRobotSim(Node):
                          durability=DurabilityPolicy.VOLATILE, depth=10)
         self._robots = []
         for spec in scenario.ground_robots:
-            robot = _Robot(spec, self.create_publisher(PoseStamped, f'/{spec.name}/pose', qos))
+            robot = _Robot(spec, self.create_publisher(PoseStamped, f'/{spec.name}/pose', qos),
+                           self.create_publisher(Odometry, f'/{spec.name}/odom', qos))
             self.create_subscription(Twist, f'/{spec.name}/cmd_vel',
                                      lambda msg, r=robot: self._on_cmd_vel(r, msg), qos)
             self.create_service(GoTo, f'/{spec.name}/go_to',
@@ -153,6 +162,7 @@ class GroundRobotSim(Node):
         stamp = self.get_clock().now().to_msg()
         transforms = []
         for r in self._robots:
+            prev = (r.x, r.y, r.z, r.yaw)
             if r.go_to is not None:
                 t = r.go_to_t + self._dt
                 x, y, yaw = r.go_to.at(t)
@@ -178,6 +188,15 @@ class GroundRobotSim(Node):
             o = pose.pose.orientation
             o.x, o.y, o.z, o.w = qx, qy, qz, qw
             r.pose_pub.publish(pose)
+
+            odom = Odometry()
+            odom.header = pose.header
+            odom.child_frame_id = r.name
+            odom.pose.pose = pose.pose
+            v = odom.twist.twist
+            v.linear.x, v.linear.y, _, v.angular.z = body_velocity(
+                prev, (r.x, r.y, r.z, r.yaw), self._dt)
+            r.odom_pub.publish(odom)
 
             t = TransformStamped()
             t.header.stamp = stamp
