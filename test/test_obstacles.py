@@ -2,17 +2,20 @@ import math
 
 import numpy as np
 import pytest
+import yaml
 
 from conftest import CONFIG_DIR, wall_map
 from hero_sim import config
 from hero_sim.config import Pillar
 from hero_sim.obstacles import (
-    _KEY_ORIGIN, PILLAR_RES, ObstacleMap, load, pillar_voxels, read_bt, write_bt,
-    write_pillar_map,
+    _KEY_ORIGIN, PILLAR_RES, ObstacleMap, grid_voxels, load, pillar_voxels, read_bt,
+    read_image_map, write_bt, write_image_map, write_pillar_map,
 )
 
-MAPS = sorted((CONFIG_DIR.parent / 'maps').glob('*.bt'))
-ICUAS26_1 = CONFIG_DIR.parent / 'maps' / 'icuas26_1.bt'
+MAPS_DIR = CONFIG_DIR.parent / 'maps'
+MAPS = sorted(MAPS_DIR.glob('*.bt'))
+IMAGE_MAPS = sorted(MAPS_DIR.glob('*/*.yaml'))
+ICUAS26_1 = MAPS_DIR / 'icuas26_1.bt'
 TRUNK = (-3.0, 0.15)  # a tree trunk in icuas26_1
 
 
@@ -209,3 +212,106 @@ def test_circles_ignore_a_pillar_height():
     a = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5, [(1.0, 0.0, 0.2)])
     b = ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, 0.5, [Pillar(1.0, 0.0, 0.2, 0.1)])
     assert a.circles == b.circles == ((1.0, 0.0, 0.2),)
+
+
+# ------------------------------------------------------------------ image maps
+
+def image_map(tmp_path, gray, alpha=None, **meta):
+    """Write m.yaml and m.png in tmp_path: gray levels, row 0 at the top. Returns the .yaml."""
+    Image = pytest.importorskip('PIL.Image')
+    gray = np.array(gray, np.uint8)
+    if alpha is None:
+        image = Image.fromarray(gray, 'L')
+    else:
+        image = Image.fromarray(np.dstack([gray, gray, gray, np.array(alpha, np.uint8)]), 'RGBA')
+    image.save(tmp_path / 'm.png')
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(
+        {'image': 'm.png', 'resolution': 0.1, 'origin': [1.0, -2.0, 0.0], **meta}))
+    return path
+
+
+def test_image_map_rows_run_down_from_the_top(tmp_path):
+    path = image_map(tmp_path, [[0, 255, 255],
+                                [255, 255, 255]])  # black: the top-left pixel only
+    occupied, x0, y0, res = read_image_map(path)
+    assert (x0, y0, res) == (1.0, -2.0, 0.1)  # the bottom-left corner
+    assert occupied.tolist() == [[False, False, False], [True, False, False]]  # row 0: bottom
+    m = ObstacleMap.from_image(path, max_radius=0.5)
+    assert m.clearance(1.05, -1.85) == 0.0  # in the top-left pixel: x 1.0..1.1, y -1.9..-1.8
+    assert m.clearance(1.25, -1.95) > 0.0
+
+
+def test_image_map_threshold_negate_and_transparency(tmp_path):
+    gray = [[0, 100, 200, 255]]  # darkness 1, 0.61, 0.22, 0
+
+    def walls(alpha=None, **meta):
+        return read_image_map(image_map(tmp_path, gray, alpha, **meta))[0][0].tolist()
+    assert walls() == [True, False, False, False]  # over map_server's default 0.65
+    assert walls(occupied_thresh=0.5) == [True, True, False, False]
+    assert walls(negate=1) == [False, False, True, True]
+    assert walls(alpha=[[0, 255, 255, 255]]) == [False] * 4  # transparent black is free
+
+
+@pytest.mark.parametrize('meta, match', [
+    ({'origin': [0.0, 0.0, 0.5]}, 'rotated'),
+    ({'origin': 5}, 'origin must be'),
+    ({'resolution': 0}, 'resolution must be'),
+    ({'mode': 'raw'}, 'mode'),
+])
+def test_image_map_rejects(tmp_path, meta, match):
+    with pytest.raises(ValueError, match=match):
+        read_image_map(image_map(tmp_path, [[0]], **meta))
+
+
+def test_image_map_needs_image_resolution_origin(tmp_path):
+    path = tmp_path / 'm.yaml'
+    path.write_text('image: m.png\n')
+    with pytest.raises(ValueError, match='missing resolution, origin'):
+        read_image_map(path)
+
+
+@pytest.mark.parametrize('path', IMAGE_MAPS, ids=lambda p: p.parent.name)
+def test_shipped_image_maps(path):
+    pytest.importorskip('PIL')
+    assert path.stem == path.parent.name  # maps/<name>/<name>.yaml: config.resolve_map finds it
+    occupied, x0, y0, res = read_image_map(path)
+    h, w = occupied.shape
+    assert (x0 + w * res / 2, y0 + h * res / 2) == pytest.approx((0.0, 0.0))  # centred
+    assert occupied[:, 0].all() and occupied[:, -1].all()  # walled on the left and right
+
+
+def test_grid_voxels_stand_on_the_cells():
+    occupied = np.array([[True, False],
+                         [False, True]])  # row 0: bottom
+    voxels = grid_voxels(occupied, -0.1, 0.2, 0.05, height=0.2)
+    assert {(kx - _KEY_ORIGIN, ky - _KEY_ORIGIN) for kx, ky, _ in voxels} == {(-2, 4), (-1, 5)}
+    assert sorted({kz - _KEY_ORIGIN for *_, kz in voxels}) == [0, 1, 2, 3]  # 0 to 0.2 m
+    assert len(voxels) == 8
+
+
+def test_image_map_octomap_reads_back_as_the_same_walls(tmp_path):
+    pytest.importorskip('PIL')
+    path = MAPS_DIR / 'simple_maze_10x10' / 'simple_maze_10x10.yaml'
+    bt = write_image_map(tmp_path / 'new' / 'maze.bt', path)
+    res, boxes = read_bt(bt)
+    occupied = read_image_map(path)[0]
+    assert res == 0.05 and len(boxes) == occupied.sum() * 40  # walls 2 m tall, 5 cm voxels
+    flat = ObstacleMap.from_bt(bt, 0.2, 2.0, max_radius=0.5)
+    image = ObstacleMap.from_image(path, max_radius=0.5)
+    for x, y in np.random.default_rng(0).uniform(-5.5, 5.5, (300, 2)):
+        assert flat.clearance(x, y) == pytest.approx(image.clearance(x, y), abs=res)
+
+
+def test_write_image_map_without_walls(tmp_path):
+    assert write_image_map(tmp_path / 'm.bt', image_map(tmp_path, [[255, 255]])) is None
+
+
+def test_load_image_map():
+    pytest.importorskip('PIL')
+    m = load(dict(config.SIM_DEFAULTS, map=str(MAPS_DIR / 'empty_3x3' / 'empty_3x3.yaml')), [0.3])
+    assert m.res == 0.05
+    assert m.clearance(1.47, 0.0) == 0.0  # the east wall: x 1.45..1.5
+    assert m.clearance(0.0, 0.0) == math.inf
+    x, _ = m.move(0.0, 0.0, 3.0, 0.0, 0.3)
+    assert 1.45 - 0.3 - 0.05 <= x <= 1.45 - 0.3

@@ -23,6 +23,7 @@
   <!-- Optional, not declared: hero_mrs_msgs (hero_mrs_control_stack) enables
        sim_attach. sim.launch.py skips that node when it isn't installed. -->
   <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-pil</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>octomap_server</exec_depend>

@@ -7,6 +7,7 @@ A scenario file has these sections (see config/example.yaml):
   sim             optional overrides of SIM_DEFAULTS
   obstacles       optional pillars that block robots and the tether object; they make
                   their own octomap, so a scenario has obstacles or sim.map, not both
+                  (sim.map is an octomap .bt or an image map, see resolve_map)
   tether          optional winch, tether and object (hero_sim/tether.py)
 
 Unknown keys are rejected so typos fail loudly instead of being ignored.
@@ -28,7 +29,7 @@ SIM_DEFAULTS = {
     'attach': 'auto',            # sim_attach dock ride-along: auto | true | false (see attach_enabled)
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
-    'map': 'icuas26_1',          # octomap: maps/<name>.bt, a path to a .bt, or null
+    'map': 'icuas26_1',          # name in maps/, path to a .bt or map .yaml, or null (resolve_map)
     'collision': True,           # stop robots at the map, pillars and each other (obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
 }
@@ -363,12 +364,33 @@ def resolve_config(arg=''):
     return str(find_config(arg, share_dir() / 'config').resolve())
 
 
+MAP_SUFFIXES = ('.bt', '.yaml', '.yml')
+
+
 def resolve_map(value):
-    """Turn sim.map into an existing .bt path, or None when the map is disabled."""
+    """Turn sim.map into an existing map file, or None when the map is disabled.
+
+    A map is an octomap .bt, or an image map: a ROS map_server .yaml next to
+    its image (obstacles.read_image_map). A name is maps/<name>.bt, or else
+    maps/<name>/<name>.yaml; anything with a '/' is a path to either.
+    """
     if not value:
         return None
     value = str(value)
-    path = Path(value) if '/' in value else share_dir() / 'maps' / f'{value}.bt'
-    if not path.is_file():
-        raise FileNotFoundError(f'hero_sim map not found: {path}')
-    return str(path)
+    if '/' in value:
+        candidates = [Path(value)]
+        if candidates[0].suffix not in MAP_SUFFIXES:
+            raise ValueError(f'sim.map must be an octomap .bt or a map .yaml (map_server '
+                             f'format, next to its image), got {value}')
+    else:
+        maps = share_dir() / 'maps'
+        candidates = [maps / f'{value}.bt', maps / value / f'{value}.yaml']
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    raise FileNotFoundError(f'hero_sim map not found: {" or ".join(map(str, candidates))}')
+
+
+def is_image_map(path):
+    """Whether a resolve_map path is an image map's .yaml rather than an octomap .bt."""
+    return Path(path).suffix in ('.yaml', '.yml')

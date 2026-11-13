@@ -33,7 +33,7 @@ jobs:
       - name: Install test tools
         run: |
           apt-get update -qq
-          apt-get install -y -qq --no-install-recommends python3-pytest python3-numpy > /dev/null
+          apt-get install -y -qq --no-install-recommends python3-pytest python3-numpy python3-pil > /dev/null
 
       - name: Build
         working-directory: ws

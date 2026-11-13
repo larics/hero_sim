@@ -6,7 +6,7 @@ import pytest
 rclpy = pytest.importorskip('rclpy')
 pytest.importorskip('crazyflie_interfaces')
 
-from conftest import duration  # noqa: E402
+from conftest import CONFIG_DIR, duration  # noqa: E402
 from crazyflie_interfaces.srv import Arm, GoTo, Takeoff  # noqa: E402
 from std_srvs.srv import Trigger  # noqa: E402
 from geometry_msgs.msg import Point, PoseStamped, Twist  # noqa: E402
@@ -175,6 +175,20 @@ def test_ground_robots_stop_at_map_obstacles(make, scenario_file):
     sim._on_cmd_vel(robot, twist(vx=-1.0))  # backing away is never blocked
     sim._tick()
     assert robot.x == pytest.approx(-3.3 - robot.radius - 0.1, abs=0.15)
+
+
+def test_ground_robots_stop_at_image_map_walls(make, scenario_file):
+    from hero_sim.ground_robots import GroundRobotSim
+    pytest.importorskip('PIL')
+    arena = CONFIG_DIR.parent / 'maps' / 'empty_3x3' / 'empty_3x3.yaml'
+    scenario_file(f'ground_robots: [{{name: r, radius: 0.3}}]\n'
+                  f'sim: {{map: {arena}, ground_rate: 10.0}}\n')
+    sim = make(GroundRobotSim)
+    robot = sim._robots[0]
+    sim._on_cmd_vel(robot, twist(vx=1.0))
+    for _ in range(30):  # 3 s at 1 m/s would carry it out of the 3 x 3 m arena
+        sim._tick()
+    assert 1.45 - 0.3 - 0.05 <= robot.x <= 1.45 - 0.3  # the east wall's inner face at 1.45
 
 
 PILLAR_SCENARIO = """

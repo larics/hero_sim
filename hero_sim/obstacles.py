@@ -2,11 +2,16 @@
 
 Two kinds of fixed obstacle, both in one ObstacleMap:
 
-  map      the scenario's octomap (.bt), flattened once at startup: every
-           occupied voxel overlapping the height band sim.collision_z is an
-           obstacle, seen from above. The default band leaves out the floor
-           slab, ceilings and the tree canopies the drones perch in, and keeps
-           trunks, posts and walls.
+  map      the scenario's sim.map, one of
+             octomap  a .bt, flattened once at startup: every occupied voxel
+                      overlapping the height band sim.collision_z is an
+                      obstacle, seen from above. The default band leaves out
+                      the floor slab, ceilings and the tree canopies the
+                      drones perch in, and keeps trunks, posts and walls.
+             image    a ROS map_server .yaml and its image (read_image_map):
+                      each dark pixel is an obstacle cell. For RViz,
+                      write_image_map extrudes them into an octomap of walls
+                      MAP_WALL_HEIGHT tall.
   pillars  the scenario's top-level obstacles: list, circles (x, y, radius)
            kept exact rather than gridded. A scenario has these or a map, not
            both. For RViz, write_pillar_map turns them into an octomap.
@@ -27,12 +32,14 @@ import math
 from pathlib import Path
 
 import numpy as np
+import yaml
 
 from hero_sim import config
 
 _TREE_DEPTH = 16
 _KEY_ORIGIN = 1 << (_TREE_DEPTH - 1)  # octomap key of coordinate 0
 PILLAR_RES = 0.05  # m, cell size without a map; move() samples paths every half cell
+MAP_WALL_HEIGHT = 2.0  # m, an image map's walls in its octomap; collisions ignore height
 
 
 def read_bt(path):
@@ -83,6 +90,46 @@ def read_bt(path):
     return float(header['res']), np.array(boxes, dtype=np.int64).reshape(-1, 4)
 
 
+def read_image_map(path):
+    """An image map, a ROS map_server .yaml plus the image it names, as an occupancy grid.
+
+    Returns (occupied, x0, y0, res): a bool array [row = y, col = x] whose
+    cell (0, 0), the image's bottom-left pixel, has its corner at the .yaml's
+    origin, and the pixel size `resolution` in m. As in map_server, a pixel
+    is occupied when its darkness (255 - gray) / 255, or gray / 255 with
+    negate, is over occupied_thresh; gray is the mean of the color channels.
+    Everything else is free, including what map_server would call unknown,
+    and transparent pixels. The image path is relative to the .yaml.
+    """
+    path = Path(path)
+    with open(path) as f:
+        meta = yaml.safe_load(f)
+    if not isinstance(meta, dict):
+        raise ValueError(f'{path}: not a map .yaml (map_server format)')
+    missing = [k for k in ('image', 'resolution', 'origin') if k not in meta]
+    if missing:
+        raise ValueError(f'{path}: missing {", ".join(missing)}')
+    res = float(meta['resolution'])
+    if res <= 0.0:
+        raise ValueError(f'{path}: resolution must be > 0, got {res}')
+    origin = meta['origin']
+    if not (isinstance(origin, (list, tuple)) and len(origin) in (2, 3)):
+        raise ValueError(f'{path}: origin must be [x, y, yaw], got {origin!r}')
+    if len(origin) == 3 and float(origin[2]) != 0.0:
+        raise ValueError(f'{path}: a rotated map (origin yaw {origin[2]}) is not supported')
+    mode = meta.get('mode', 'trinary')
+    if mode not in ('trinary', 'scale'):
+        raise ValueError(f'{path}: mode {mode!r} is not supported, only trinary or scale')
+    threshold = float(meta.get('occupied_thresh', 0.65))
+    from PIL import Image  # only image maps need Pillow
+    with Image.open(path.parent / meta['image']) as im:
+        rgba = np.asarray(im.convert('RGBA'), dtype=float)
+    gray = rgba[..., :3].mean(axis=2)
+    darkness = gray / 255.0 if meta.get('negate', 0) else (255.0 - gray) / 255.0
+    occupied = (darkness > threshold) & (rgba[..., 3] >= 128)
+    return occupied[::-1], float(origin[0]), float(origin[1]), res
+
+
 class ObstacleMap:
     """Obstacle cells on a 2D grid plus circular pillars, with the clearance to the nearest one."""
 
@@ -125,6 +172,12 @@ class ObstacleMap:
             occupied[ky:ky + size, kx:kx + size] = True
         return cls(occupied, (kx0 - _KEY_ORIGIN) * res, (ky0 - _KEY_ORIGIN) * res, res,
                    max_radius, circles)
+
+    @classmethod
+    def from_image(cls, path, max_radius, circles=()):
+        """The occupied pixels of an image map (read_image_map), plus `circles`."""
+        occupied, x0, y0, res = read_image_map(path)
+        return cls(occupied, x0, y0, res, max_radius, circles)
 
     def clearance(self, x, y, others=()):
         """Distance (m) from (x, y) to the nearest obstacle; inf if beyond max_radius.
@@ -179,6 +232,20 @@ def pillar_voxels(pillars, res=PILLAR_RES):
     return keys
 
 
+def grid_voxels(occupied, x0, y0, res, height=MAP_WALL_HEIGHT):
+    """Octomap keys (kx, ky, kz) of walls standing on an occupancy grid's cells.
+
+    occupied, x0, y0, res as read_image_map returns them. Each cell becomes
+    the column of voxels (size res) holding its center, from the floor up to
+    `height`, so when the origin is a multiple of res they are the cells.
+    """
+    rows, cols = np.nonzero(occupied)
+    kx = np.floor(x0 / res + cols + 0.5).astype(np.int64) + _KEY_ORIGIN
+    ky = np.floor(y0 / res + rows + 0.5).astype(np.int64) + _KEY_ORIGIN
+    layers = range(_KEY_ORIGIN, _KEY_ORIGIN + max(1, round(height / res)))
+    return {(x, y, z) for x, y in zip(kx.tolist(), ky.tolist()) for z in layers}
+
+
 def write_bt(path, voxels, res):
     """Write occupied voxels (octomap keys) as an octomap .bt file; read_bt reads it back.
 
@@ -221,6 +288,20 @@ def write_pillar_map(path, pillars, res=PILLAR_RES):
     return path
 
 
+def write_image_map(path, map_file, height=MAP_WALL_HEIGHT):
+    """Write an image map's occupied pixels as an octomap .bt of walls `height` tall.
+
+    Dirs are made as needed. Returns path, or None when the image has nothing
+    occupied (an octomap can't be empty).
+    """
+    occupied, x0, y0, res = read_image_map(map_file)
+    if not occupied.any():
+        return None
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    write_bt(path, grid_voxels(occupied, x0, y0, res, height), res)
+    return path
+
+
 def load(sim, radii, pillars=()):
     """The scenario's ObstacleMap for robots of these radii, or None when collisions are off.
 
@@ -230,8 +311,10 @@ def load(sim, radii, pillars=()):
     """
     if not sim['collision'] or not radii:
         return None
-    bt_file = config.resolve_map(sim['map'])
-    if bt_file is None:
+    map_file = config.resolve_map(sim['map'])
+    if map_file is None:
         return ObstacleMap(np.zeros((0, 0), bool), 0.0, 0.0, PILLAR_RES, max(radii), pillars)
-    return ObstacleMap.from_bt(bt_file, *sim['collision_z'], max_radius=max(radii),
+    if config.is_image_map(map_file):
+        return ObstacleMap.from_image(map_file, max(radii), pillars)
+    return ObstacleMap.from_bt(map_file, *sim['collision_z'], max_radius=max(radii),
                                circles=pillars)

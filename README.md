@@ -70,14 +70,38 @@ obstacles:                              # pillars instead of a map, see Maps bel
 
 ## Maps
 
-What's in the world comes from one of two places:
+What's in the world comes from one of three places:
 
 | | Set it with | In RViz |
 |---|---|---|
-| A map | `sim: {map: icuas26_1}`: a map from `maps/`, or the path to any octomap `.bt` file. `icuas26_1` is the default | occupied cells |
+| An octomap | `sim: {map: icuas26_1}`: a map from `maps/`, or the path to any octomap `.bt` file. `icuas26_1` is the default | occupied cells |
+| An image | `sim: {map: hard_maze_10x10}`: a map from `maps/`, or the path to any map `.yaml` (see below) | occupied cells, as walls 2 m tall |
 | Pillars | an `obstacles:` list, on an empty floor | occupied cells, plus a cylinder for each pillar |
 
-A scenario uses one or the other: with `obstacles:` there's no map, and setting both is an error. For an empty floor with nothing on it, set `sim: {map: null}` and leave out `obstacles:`.
+A scenario uses only one of them: with `obstacles:` there's no map, and setting both is an error. For an empty floor with nothing on it, set `sim: {map: null}` and leave out `obstacles:`.
+
+An image map is a picture of the floor seen from above, where dark pixels are walls. It comes as two files, in the format ROS `map_server` uses (so maps saved by nav2's `map_saver` or `slam_toolbox` work too):
+
+```yaml
+# maps/hard_maze_10x10/hard_maze_10x10.yaml
+image: hard_maze_10x10.bmp    # next to this file: .bmp, .png or .pgm
+resolution: 0.05              # m per pixel
+origin: [-5.0, -5.0, 0.0]     # x, y of the image's bottom-left corner (m); rotation must be 0
+occupied_thresh: 0.8          # a pixel darker than this (0 white .. 1 black) is a wall
+negate: 0                     # 1: light pixels are walls instead
+```
+
+Outside the image is open floor. The maps that come with hero_sim:
+
+| Map | Size | |
+|---|---|---|
+| `empty_3x3`, `empty_10x10` | 3 × 3 m, 10 × 10 m | walls around the edge only |
+| `simple_maze_10x10` | 10 × 10 m | three walls splitting the floor |
+| `hard_maze_10x10` | 10 × 10 m | a maze, open at the top and bottom |
+| `random_10x10` | 10 × 10 m | scattered boxes and posts |
+| `test_10x10` | 10 × 10 m | mixed shapes: boxes, discs, triangles, posts |
+
+To add your own, put `<name>.yaml` and its image in `maps/<name>/` and rebuild, or give the path to the `.yaml`.
 
 ```yaml
 obstacles:                              # m
@@ -85,7 +109,7 @@ obstacles:                              # m
   - {x: 3.0, y: -1.0, radius: 0.2, height: 0.5}   # height: how tall it is (2 m if left out)
 ```
 
-The pillars are turned into an octomap, written to `/tmp/hero_sim/<scenario>_obstacles.bt`, and served just like a `.bt` map, with the same topics (`/octomap_binary`, `/projected_map`, ...). So RViz, and any code that reads the map, can't tell them apart. To keep a pillar map, copy that file and use it as `sim: {map: path/to/file.bt}` in another scenario.
+The pillars are turned into an octomap, written to `/tmp/hero_sim/<scenario>_obstacles.bt`, and served just like a `.bt` map, with the same topics (`/octomap_binary`, `/projected_map`, ...). So RViz, and any code that reads the map, can't tell them apart. To keep a pillar map, copy that file and use it as `sim: {map: path/to/file.bt}` in another scenario. Image maps are served the same way, from `/tmp/hero_sim/<scenario>_map.bt`.
 
 The map is drawn when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
 
@@ -137,7 +161,7 @@ The low-level setpoint topics (`cmd_position`, `cmd_hover`, ...) work too.
 
 A robot stops when it would hit something, and moves again once you command it away. These block it:
 
-- the map's trunks and posts;
+- the map's trunks and posts, or an image map's walls;
 - pillars, from the scenario's `obstacles:` list;
 - other ground robots.
 

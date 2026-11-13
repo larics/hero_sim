@@ -179,6 +179,34 @@ def test_resolve_map_disabled_and_path(tmp_path):
     assert config.resolve_map(str(bt)) == str(bt)
 
 
+def test_resolve_map_name_tries_the_octomap_then_the_image_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, 'share_dir', lambda: tmp_path)
+    maps = tmp_path / 'maps'
+    (maps / 'maze').mkdir(parents=True)
+    (maps / 'maze' / 'maze.yaml').write_text('{}\n')
+    assert config.resolve_map('maze') == str(maps / 'maze' / 'maze.yaml')
+    (maps / 'maze.bt').write_bytes(b'')
+    assert config.resolve_map('maze') == str(maps / 'maze.bt')
+    with pytest.raises(FileNotFoundError, match='nope.bt or .*nope.yaml'):
+        config.resolve_map('nope')
+
+
+def test_resolve_map_path_must_be_bt_or_yaml(tmp_path):
+    image = tmp_path / 'm.bmp'
+    image.write_bytes(b'')
+    with pytest.raises(ValueError, match='octomap .bt or a map .yaml'):
+        config.resolve_map(str(image))
+    assert config.is_image_map(str(tmp_path / 'm.yaml')) and not config.is_image_map('m.bt')
+
+
+def test_shipped_maps_resolve_by_name(monkeypatch):
+    monkeypatch.setattr(config, 'share_dir', lambda: CONFIG_DIR.parent)
+    maps = CONFIG_DIR.parent / 'maps'
+    assert config.resolve_map('icuas26_1') == str(maps / 'icuas26_1.bt')
+    assert config.resolve_map('hard_maze_10x10') == str(
+        maps / 'hard_maze_10x10' / 'hard_maze_10x10.yaml')
+
+
 SHIPPED = sorted(CONFIG_DIR.rglob('*.yaml'))
 
 

@@ -20,6 +20,13 @@ model_files = [
     if os.path.isdir(d) and os.path.basename(d) != 'source'
 ]
 
+# Image maps: maps/<name>/, a map .yaml and its image (config.resolve_map).
+image_map_files = [
+    (f'share/{package_name}/{d}', sorted(f for f in glob(f'{d}/*') if os.path.isfile(f)))
+    for d in sorted(glob('maps/*'))
+    if os.path.isdir(d)
+]
+
 setup(
     name=package_name,
     version='0.1.0',
@@ -31,6 +38,7 @@ setup(
         *config_files,
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/maps', glob('maps/*.bt')),
+        *image_map_files,
         *model_files,
     ],
     install_requires=['setuptools', 'pyyaml'],
