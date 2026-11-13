@@ -1,0 +1,59 @@
+# sim_env_b6: sim_env_b with 6 docks instead of 9 (hero_mrs_ros2 scenario
+# sim_env_b6): scout_1 keeps dock_0, dock_2 and dock_4, and cf_2, cf_4 and cf_6
+# start on the floor instead of dock_1/3/5. Otherwise a copy of sim_env_b.yaml.
+# Created for the stack's sim experiments (ablation A4 at fewer docks).
+#
+# sim_env_b: Env B of the simulation experiments — 6 x 6 m working area on a
+# 7 x 7 m floor, scout_1 as the base in the (-x, -y) corner with 6 docks, 3
+# herovers with a dock each, 10 perch poles, 16 gripper CFs (hero_mrs_ros2
+# scenario sim_env_b; world and every position from the stack's
+# sim_experiments/worlds/make_sim_env_b.py and sim_env_b_layout.py). All keys,
+# and the sim: block defaults, are documented in example.yaml.
+ground_robots:
+  - name: scout_1
+    pose: {x: -2.4, y: -2.4, z: 0.20, yaw: 0.0}
+    drive: omni
+    model: scout
+  - name: herover_1
+    pose: {x: -1.5, y: -2.7, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+  - name: herover_2
+    pose: {x: -2.7, y: -1.5, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+  - name: herover_3
+    pose: {x: -0.8, y: -2.9, z: 0.080, yaw: 0.0}
+    drive: omni
+    model: herover
+# Every dock starts occupied (the stack's init_docked): cf_1, cf_3, cf_5 on scout_1's
+# dock_0, dock_2, dock_4, cf_7..cf_9 on the herovers' dock_6..dock_8 (z 0.23 = where a
+# CF comes to rest on a dock; the stack attaches them so they ride along).
+# cf_2, cf_4, cf_6 and cf_10..cf_16 on the floor next to the base, outside the working area. Every
+# CF carries a gripper; one left on a branch is replaced on a base dock.
+# radius 0.07: a Crazyflie 2.1's real reach (as in sim_env_a.yaml).
+crazyflies:
+  - {pose: {x: -2.6, y: -2.31, z: 0.23}, gripper: true, radius: 0.07}   # cf_1, dock_0 (scout_1)
+  - {pose: {x: -3.2, y: -2.25, z: 0.03}, gripper: true, radius: 0.07}   # cf_2, floor (sim_env_b: dock_1)
+  - {pose: {x: -2.4, y: -2.31, z: 0.23}, gripper: true, radius: 0.07}   # cf_3, dock_2 (scout_1)
+  - {pose: {x: -2.5, y: -3.2, z: 0.03}, gripper: true, radius: 0.07}    # cf_4, floor (sim_env_b: dock_3)
+  - {pose: {x: -2.2, y: -2.31, z: 0.23}, gripper: true, radius: 0.07}   # cf_5, dock_4 (scout_1)
+  - {pose: {x: -3.2, y: -1.0, z: 0.03}, gripper: true, radius: 0.07}    # cf_6, floor (sim_env_b: dock_5)
+  - {pose: {x: -1.5, y: -2.7, z: 0.23}, gripper: true, radius: 0.07}   # cf_7, dock_6 (herover_1)
+  - {pose: {x: -2.7, y: -1.5, z: 0.23}, gripper: true, radius: 0.07}   # cf_8, dock_7 (herover_2)
+  - {pose: {x: -0.8, y: -2.9, z: 0.23}, gripper: true, radius: 0.07}   # cf_9, dock_8 (herover_3)
+  - {pose: {x: -3.2, y: -2.0, z: 0.03}, gripper: true, radius: 0.07}   # cf_10, floor
+  - {pose: {x: -3.2, y: -1.75, z: 0.03}, gripper: true, radius: 0.07}   # cf_11, floor
+  - {pose: {x: -3.2, y: -1.5, z: 0.03}, gripper: true, radius: 0.07}   # cf_12, floor
+  - {pose: {x: -3.2, y: -1.25, z: 0.03}, gripper: true, radius: 0.07}   # cf_13, floor
+  - {pose: {x: -2.0, y: -3.2, z: 0.03}, gripper: true, radius: 0.07}   # cf_14, floor
+  - {pose: {x: -1.75, y: -3.2, z: 0.03}, gripper: true, radius: 0.07}   # cf_15, floor
+  - {pose: {x: -2.25, y: -3.2, z: 0.03}, gripper: true, radius: 0.07}   # cf_16, floor
+sim:
+  rviz: false         # data runs; true to watch a pilot
+  models: false       # meshes and grippers in RViz; true together with rviz
+  map: /root/ros2_ws/src/hero_mrs_control_stack/hero_mrs_ros2/worlds/sim_env_b.bt
+  # Off, as in sim_env_a.yaml: robots pass through poles; contacts are counted
+  # from the tracks instead. Platforms and branches aren't in the map, only
+  # the poles.
+  collision: false
