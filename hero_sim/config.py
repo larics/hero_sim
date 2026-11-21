@@ -2,7 +2,8 @@
 
 A scenario file has these sections (see config/example.yaml):
 
-  ground_robots   kinematic ground robots, one entry per robot
+  ground_robots   kinematic ground robots, one entry per robot; `camera:` puts a
+                  forward camera on one, rendered by Gazebo (hero_sim/gazebo.py)
   crazyflies      Crazyflies, named cf_1..cf_N in list order
   sim             optional overrides of SIM_DEFAULTS
   obstacles       optional pillars that block robots and the tether object; they make
@@ -16,6 +17,7 @@ from dataclasses import dataclass
 import math
 import os
 from pathlib import Path
+import shutil
 from typing import NamedTuple
 
 import yaml
@@ -29,10 +31,13 @@ SIM_DEFAULTS = {
     'attach': 'auto',            # sim_attach dock ride-along: auto | true | false (see attach_enabled)
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
+    'map_model': False,          # RViz also draws the map's own 3D model (gazebo.map_visuals)
     'map': 'icuas26_1',          # name in maps/, path to a .bt or map .yaml, or null (resolve_map)
     'wall_height': 2.0,          # m, an image map's walls in RViz; collisions ignore height
     'collision': True,           # stop robots at the map, pillars and each other (obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
+    'gazebo': 'auto',            # Gazebo renders the cameras: auto | true | false (see gazebo_enabled)
+    'gazebo_gui': False,         # Gazebo's own window, as well as RViz
 }
 
 # RViz meshes by model name, relative to models/. Crazyflies always use
@@ -63,9 +68,32 @@ MARKER_HEIGHTS = {
     'scout': 0.227,
 }
 
+# Where a ground robot's camera sits (x, y, z in m) in the robot's frame, whose
+# origin is its pose: the top of the deck (MARKER_HEIGHTS). By model, at the
+# front edge of its mesh, a few cm above the deck. Any robot can set its own
+# with `camera: {pose: ...}`.
+CAMERA_MOUNTS = {
+    'herover': (0.12, 0.0, 0.03),
+    'scout': (0.30, 0.0, 0.03),
+}
+DEFAULT_CAMERA_MOUNT = (0.0, 0.0, 0.1)
+
 DRIVES = ('omni', 'diff')
 CONFIG_ENV = 'HERO_SIM_CONFIG'
 DEFAULT_CONFIG = 'example.yaml'
+
+
+@dataclass(frozen=True)
+class Camera:
+    """A camera on a ground robot, looking forward. Gazebo renders it (hero_sim/gazebo.py)."""
+    x: float = 0.0       # m, where it sits in the robot's frame (CAMERA_MOUNTS)
+    y: float = 0.0
+    z: float = 0.0
+    pitch: float = 0.0   # rad, > 0 tilts it down
+    width: int = 640     # px
+    height: int = 480    # px
+    hfov: float = 1.211  # rad, horizontal field of view: 69 deg, as a RealSense D435's color camera
+    rate: float = 15.0   # Hz
 
 
 @dataclass(frozen=True)
@@ -78,6 +106,7 @@ class GroundRobot:
     model: str = None  # key of MODEL_MESHES, or None for no mesh
     radius: float = DEFAULT_GROUND_RADIUS  # m, footprint for map collisions
     z: float = 0.0  # m, height of the published pose (MARKER_HEIGHTS)
+    camera: Camera = None  # None: no camera
 
 
 @dataclass(frozen=True)
@@ -170,6 +199,14 @@ def parse(raw):
             and float(band[0]) < float(band[1])):
         raise ValueError(f'sim.collision_z must be [z_min, z_max], z_min < z_max, got {band!r}')
     sim['collision_z'] = (float(band[0]), float(band[1]))
+    if not (isinstance(sim['gazebo'], bool) or sim['gazebo'] == 'auto'):
+        raise ValueError(f'sim.gazebo must be auto, true or false, got {sim["gazebo"]!r}')
+    for key in ('gazebo_gui', 'map_model'):
+        if not isinstance(sim[key], bool):
+            raise ValueError(f'sim.{key} must be true or false, got {sim[key]!r}')
+    cameras = [r.name for r in ground if r.camera]
+    if cameras and sim['gazebo'] is False:
+        raise ValueError(f'{", ".join(cameras)}: a camera needs Gazebo, but sim.gazebo is false')
 
     pillars = tuple(_pillar(i, o) for i, o in enumerate(_list(raw, 'obstacles')))
     if pillars:
@@ -199,6 +236,35 @@ def attach_enabled(sim):
             'sim.attach is true but hero_mrs_msgs is not installed; build it from '
             'hero_mrs_control_stack, or set sim.attach to auto or false')
     return sim['attach']
+
+
+def gazebo_missing():
+    """What of Gazebo isn't installed, as a list of package names (empty: all there)."""
+    from importlib.util import find_spec
+    missing = [] if shutil.which('gz') else ['gz-harmonic']
+    try:
+        bindings = find_spec('gz.transport13') is not None
+    except ModuleNotFoundError:  # no gz package at all
+        bindings = False
+    return missing + ([] if bindings else ['python3-gz-transport13'])
+
+
+def gazebo_enabled(scenario):
+    """Whether to start Gazebo for this scenario. It renders the cameras (hero_sim/gazebo.py).
+
+    Gazebo is an optional dependency, like hero_mrs_msgs (attach_enabled):
+    'auto' starts it only when a ground robot has a camera, true always (to
+    look at the world in its window), false never (a camera is then a config
+    error). Raises RuntimeError when it would start but isn't installed.
+    """
+    gazebo = scenario.sim['gazebo']
+    wanted = gazebo is True or (gazebo == 'auto' and any(r.camera for r in scenario.ground_robots))
+    if wanted and gazebo_missing():
+        why = 'sim.gazebo is true' if gazebo is True else 'a ground robot has a camera'
+        raise RuntimeError(
+            f'{why}, but Gazebo is not installed (missing: {", ".join(gazebo_missing())}). '
+            'Install Gazebo Harmonic, see README "Cameras", or remove the camera')
+    return wanted
 
 
 def _list(raw, key):
@@ -231,7 +297,7 @@ def _radius(entry, where, default):
 
 def _ground_robot(i, entry):
     where = f'ground_robots[{i}]'
-    _check_keys(entry, ('name', 'pose', 'drive', 'model', 'radius'), where)
+    _check_keys(entry, ('name', 'pose', 'drive', 'model', 'radius', 'camera'), where)
     name = entry.get('name')
     if not isinstance(name, str) or not name:
         raise ValueError(f'{where}: name is required')
@@ -245,7 +311,34 @@ def _ground_robot(i, entry):
     x, y, z, yaw = _pose(entry, f'{where} ({name})', ('x', 'y', 'z', 'yaw'),
                          z=MARKER_HEIGHTS.get(model, 0.0))
     radius = _radius(entry, f'{where} ({name})', FOOTPRINT_RADII.get(model, DEFAULT_GROUND_RADIUS))
-    return GroundRobot(name, x, y, yaw, drive, model, radius, z)
+    camera = _camera(entry.get('camera'), f'{where} ({name}).camera', model)
+    return GroundRobot(name, x, y, yaw, drive, model, radius, z, camera)
+
+
+def _camera(value, where, model):
+    """`camera:` of a ground robot: true for the defaults, or a mapping overriding some."""
+    if value is None or value is False:
+        return None
+    if value is True:
+        value = {}
+    if not isinstance(value, dict):
+        raise ValueError(f'{where} must be true, false or a mapping, got {value!r}')
+    _check_keys(value, ('pose', 'width', 'height', 'hfov', 'rate'), where)
+    mx, my, mz = CAMERA_MOUNTS.get(model, DEFAULT_CAMERA_MOUNT)
+    x, y, z, pitch = _pose(value, where, ('x', 'y', 'z', 'pitch'), x=mx, y=my, z=mz)
+    size = {}
+    for key in ('width', 'height'):
+        v = value.get(key, getattr(Camera, key))
+        if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+            raise ValueError(f'{where}.{key} must be a whole number of pixels > 0, got {v!r}')
+        size[key] = v
+    hfov = float(value.get('hfov', Camera.hfov))
+    if not 0.0 < hfov < math.pi:
+        raise ValueError(f'{where}.hfov must be between 0 and pi rad, got {hfov}')
+    rate = float(value.get('rate', Camera.rate))
+    if rate <= 0.0:
+        raise ValueError(f'{where}.rate must be > 0, got {rate}')
+    return Camera(x, y, z, pitch, size['width'], size['height'], hfov, rate)
 
 
 def _crazyflie(i, entry):

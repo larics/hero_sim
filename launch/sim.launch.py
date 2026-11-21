@@ -4,13 +4,23 @@
 
 Without config:=, $HERO_SIM_CONFIG is used (startup/_setup.sh exports it),
 then config/example.yaml.
+
+With a camera on a ground robot (or sim.gazebo: true), it also starts a
+headless Gazebo server on a world written to <tmp>/hero_sim/<config
+name>_world.sdf (hero_sim/gazebo.py), gazebo_bridge, and with sim.gazebo_gui
+Gazebo's window. RViz then gets an Image panel per camera, from a copy of
+sim.rviz written to <tmp>/hero_sim/<config name>.rviz.
 """
+import os
+from pathlib import Path
+import tempfile
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, LogInfo, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-from hero_sim import config
+from hero_sim import config, gazebo
 
 
 def _actions(context):
@@ -38,11 +48,31 @@ def _actions(context):
     elif sim['attach'] == 'auto':
         actions.append(LogInfo(msg='[hero_sim] hero_mrs_msgs not installed: '
                                    'sim_attach (dock ride-along, grippers) skipped'))
+    rviz_config = config.share_dir() / 'config' / 'sim.rviz'
+    if config.gazebo_enabled(scenario):
+        out = Path(tempfile.gettempdir()) / 'hero_sim' / Path(config_path).stem
+        world = gazebo.write_world(f'{out}_world.sdf', scenario, config.share_dir() / 'models')
+        # The map's scenery models (maps/small_house/models/), for model:// URIs.
+        paths = gazebo.resource_paths(sim) + [os.environ.get('GZ_SIM_RESOURCE_PATH', '')]
+        env = {'GZ_SIM_RESOURCE_PATH': os.pathsep.join(p for p in paths if p)}
+        actions += [
+            LogInfo(msg=f'[hero_sim] gazebo world: {world}'),
+            ExecuteProcess(cmd=['gz', 'sim', '-s', '-r', '--headless-rendering', world],
+                           name='gz_server', output='screen', additional_env=env),
+            Node(package='hero_sim', executable='gazebo_bridge', name='gazebo_bridge',
+                 output='screen', parameters=params),
+        ]
+        if sim['gazebo_gui']:
+            actions.append(ExecuteProcess(cmd=['gz', 'sim', '-g'], name='gz_gui', output='screen',
+                                          additional_env=env))
+        if any(r.camera for r in scenario.ground_robots):
+            rviz_config = Path(f'{out}.rviz')
+            rviz_config.write_text(gazebo.rviz_config(
+                (config.share_dir() / 'config' / 'sim.rviz').read_text(), scenario))
     if sim['rviz']:
-        rviz_config = str(config.share_dir() / 'config' / 'sim.rviz')
         actions.append(Node(package='rviz2', executable='rviz2', name='rviz2', output='screen',
-                            arguments=['-d', rviz_config]))
-        if sim['models']:
+                            arguments=['-d', str(rviz_config)]))
+        if sim['models'] or sim['map_model']:
             actions.append(Node(package='hero_sim', executable='robot_models',
                                 name='robot_models', output='screen', parameters=params))
     return actions

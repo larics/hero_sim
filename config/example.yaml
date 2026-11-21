@@ -13,6 +13,15 @@
 #   radius: 0.42   footprint (m) kept out of the map, pillars and other ground robots
 #                  (sim.collision). Default by model: scout 0.42, herover 0.17, no
 #                  model 0.3. 0 ignores them
+#   camera: true   a camera looking forward, drawn by Gazebo (README "Cameras"):
+#                  /<name>/camera/image_raw and camera_info. Or a mapping to change
+#                  any of its defaults:
+#                  camera: {width: 640, height: 480, rate: 15, hfov: 1.211,
+#                           pose: {x: 0.12, y: 0.0, z: 0.03, pitch: 0.0}}
+#                  px, px, Hz, rad (69 deg); pose is where it sits in the robot's frame
+#                  (m, from the top of the deck; pitch > 0 tilts it down). The pose
+#                  default is by model, at the front of the deck: herover x 0.12,
+#                  scout x 0.30, both z 0.03; no model z 0.1
 # Each one also serves /<name>/go_to (crazyflie_interfaces/srv/GoTo, like the
 # Crazyflies): drives to goal x, y and yaw in `duration`, slower if the speed
 # limits below need it. Any cmd_vel message cancels it.
@@ -48,6 +57,8 @@ sim:
                              # only if hero_mrs_msgs is installed; true | false to force
   rviz: true                 # RViz with config/sim.rviz
   models: true               # robot meshes in RViz (crazyflies, and ground robots with a model)
+  map_model: false           # RViz also draws the map's own 3D model, in color, over its octomap:
+                             # small_house's furniture, icuas26_1's trees. Maps without one: octomap only
   # map: icuas26_1           # octomap: maps/<name>.bt, a path to a .bt, or null for none.
                              # Default icuas26_1; not together with obstacles: (below)
   wall_height: 2.0           # m, how tall an image map's walls are in RViz; collisions ignore it
@@ -56,6 +67,9 @@ sim:
                              # ground robots also stop at each other
   collision_z: [0.2, 2.0]    # m, map heights that count as obstacles, flattened to 2D:
                              # trunks and posts, not the floor, ceiling or tree canopies
+  gazebo: auto               # Gazebo, which draws the cameras: auto starts it only when a
+                             # ground robot has a camera; true always; false never
+  gazebo_gui: false          # true: also open Gazebo's own window
 
 # Optional pillars (m): circles that block the robots (drones at any height)
 # and the tether object while sim.collision is on. They are the scenario's

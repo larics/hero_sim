@@ -1,0 +1,8 @@
+# The Small House's own 2D map, made with a TurtleBot3's lidar (https://github.com/aws-robotics/aws-robomaker-small-house-world).
+image: small_house.pgm
+resolution: 0.050000
+origin: [-12.500000, -12.500000, 0.000000]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
+

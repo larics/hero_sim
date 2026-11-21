@@ -100,6 +100,9 @@ Outside the image is open floor. The maps that come with hero_sim:
 | `hard_maze_4x4` | 4 × 4 m | a maze, open at the top and bottom |
 | `random_4x4` | 4 × 4 m | scattered boxes and posts |
 | `test_4x4` | 4 × 4 m | mixed shapes: boxes, discs, triangles, posts |
+| `small_house` | 19 × 11 m | a furnished house: bedroom, living room, dining room and kitchen, sunroom. With cameras, Gazebo draws its real furniture (see below) |
+
+`small_house` is [AWS RoboMaker's Small House](https://github.com/aws-robotics/aws-robomaker-small-house-world) (MIT-0 license), imported by `maps/import_small_house.py`. Its map is the 2D map that came with it, made with a robot's lidar, so robots drive under tables and between chair legs. A map can have its own Gazebo world like this one, `<name>.sdf` next to its `.yaml`, with its models in a `models/` folder beside it. The camera then sees that world instead of the map's walls.
 
 To add your own, put `<name>.yaml` and its image in `maps/<name>/` and rebuild, or give the path to the `.yaml`.
 
@@ -122,6 +125,8 @@ self.create_subscription(OccupancyGrid, '/map', self.on_map,
 RViz shows it in the *Image map (/map)* display, under the octomap's walls. Octomaps and pillars have no `/map`; their `/projected_map` has only walls (100) and unknown (−1).
 
 The map is drawn, and `/map` published, when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
+
+`sim: {map_model: true}` also draws the map's own 3D model in RViz, in color, over the octomap: `small_house`'s furniture or `icuas26_1`'s trees. It's off by default. Maps that are only an image or pillars have no model, so RViz shows just the octomap.
 
 ## Moving the robots
 
@@ -185,6 +190,43 @@ Your code can read the pillars from `/hero_sim/obstacles` (`visualization_msgs/M
 ros2 topic echo --once /hero_sim/obstacles
 ```
 
+## Cameras
+
+A ground robot can carry a camera that looks forward. Gazebo draws its images. hero_sim starts Gazebo only for a scenario with a camera, and Gazebo only draws: the robots still move exactly as described above, with no wheels or physics.
+
+```yaml
+ground_robots:
+  - name: herover_1
+    model: herover
+    camera: true        # 640 x 480 px, 15 Hz, 69° wide, level, at the front of the deck
+```
+
+| Topic | Type | |
+|---|---|---|
+| `/<name>/camera/image_raw` | `sensor_msgs/Image` | `rgb8` |
+| `/<name>/camera/camera_info` | `sensor_msgs/CameraInfo` | the lens: a pinhole, no distortion |
+
+The images are in the TF frame `<name>/camera_optical` (z forward, x right, y down), which hangs from `<name>/camera_link` (x forward, z up). RViz shows each camera in a panel, or use `ros2 run rqt_image_view rqt_image_view`.
+
+Any setting can be changed: `camera: {width: 320, height: 240, rate: 30, hfov: 1.5, pose: {x: 0.12, z: 0.03, pitch: 0.3}}`. `pose` is where the camera sits in the robot's frame, in m from the top of the deck; `pitch` is in rad, and above 0 tilts it down. Try it with `bash start.sh camera_example.yaml`.
+
+The camera sees the floor, the map (an octomap's trees, an image map's walls 2 m tall, or the pillars; `small_house`'s furniture) and the other robots. It doesn't see the tether, grippers or docks.
+
+`sim: {gazebo_gui: true}` also opens Gazebo's own window.
+
+### Installing Gazebo
+
+Cameras need Gazebo Harmonic, which isn't in the docker image. Everything else works without it, and a scenario with a camera stops with an error that says what's missing. Install it once, inside the container:
+
+```bash
+apt-get update && apt-get install -y curl gnupg lsb-release
+curl -sSL https://packages.osrfoundation.org/gazebo.gpg -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] http://packages.osrfoundation.org/gazebo/ubuntu-stable $(lsb_release -cs) main" > /etc/apt/sources.list.d/gazebo-stable.list
+apt-get update && apt-get install -y gz-harmonic python3-gz-transport13 python3-gz-msgs10
+```
+
+Gazebo draws on the GPU, so the container needs to see it: start it with `--device /dev/dri` (Intel or AMD graphics).
+
 ## Tether task
 
 Get an object into a goal circle on the floor. A tether runs from a fixed winch, through a pulley on a ground robot (UGV), through a ring on a Crazyflie (UAV), and down to the object.
@@ -237,6 +279,9 @@ The `tether:` section of `config/tether/tether_demo.yaml` sets where the winch, 
 | `ros2 launch` doesn't find a config you just added | Build again. `start.sh` finds new files without a rebuild |
 | A robot doesn't move | It may be pressed against an obstacle: command it away. Check that the simulator is running: `ros2 node list` |
 | A `go_to` stops right away | Something keeps publishing `cmd_vel` to that robot, such as a `ros2 topic pub` without `--once` |
+| `a ground robot has a camera, but Gazebo is not installed` | Install it ([Installing Gazebo](#installing-gazebo)), or remove `camera:` |
+| No camera images | Look at the `gz_server` output in the launch pane. Gazebo needs the GPU: start the container with `--device /dev/dri` |
+| `gz_server`: `Failed to create dummy render window` | The container sees an NVIDIA GPU but has no NVIDIA driver. Give it only the Intel or AMD GPU (`ls -l /dev/dri/by-path`; `pci-0000:00:02.0` is usually Intel), e.g. `--device /dev/dri/card1 --device /dev/dri/renderD128`. Or set up the NVIDIA Container Toolkit and use `--gpus all` |
 - With `hero_mrs_msgs` in the workspace, `/sim/attach_agent` starts: robots carry docked Crazyflies, and an empty `parent_id` locks a Crazyflie in place (perched on a branch).
 - `gripper: true` on a Crazyflie draws a two-claw gripper. To fit a new one: `ros2 service call /sim/cf_1/add_gripper std_srvs/srv/Trigger`.
 - `sim: {models: false}` hides the robot models in RViz. The mesh tools are described in [models/README.md](models/README.md).

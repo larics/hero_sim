@@ -1,0 +1,23 @@
+# A herover with a camera, on an image map. Needs Gazebo Harmonic (README "Cameras").
+#
+#   bash start.sh camera_example.yaml
+#
+# herover_1's camera publishes /herover_1/camera/image_raw and
+# /herover_1/camera/camera_info, and RViz shows it in a panel. The other
+# herovers are there to be seen.
+#
+# camera: true            the defaults: 640x480, 15 Hz, 69 deg wide, level, at the
+#                         front of the deck
+# camera: {width: 320, height: 240, rate: 30, hfov: 1.5, pose: {pitch: 0.3}}
+#                         override any of them. pose is where it sits in the
+#                         robot's frame (m, rad): x forward, z up from the top
+#                         of the deck; pitch > 0 tilts it down
+ground_robots:
+  - {name: herover_1, pose: {x: -4.0, y: -4.0, yaw: 0.0}, drive: omni, model: herover, camera: true}
+  - {name: herover_2, pose: {x: -2.8, y: -3.7, yaw: 2.5}, drive: omni, model: herover}
+  - {name: herover_3, pose: {x: -2.0, y: -4.4, yaw: 0.0}, drive: omni, model: herover}
+
+sim:
+  map: simple_maze_10x10
+  collision: true
+  gazebo_gui: false        # true: also open Gazebo's own window

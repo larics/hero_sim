@@ -278,7 +278,8 @@ def test_shipped_image_maps(path):
     occupied, x0, y0, res = read_image_map(path)
     h, w = occupied.shape
     assert (x0 + w * res / 2, y0 + h * res / 2) == pytest.approx((0.0, 0.0))  # centred
-    assert occupied[:, 0].all() and occupied[:, -1].all()  # walled on the left and right
+    if path.parent.name != 'small_house':  # imported: its walls are inside (test_gazebo.py)
+        assert occupied[:, 0].all() and occupied[:, -1].all()  # walled on the left and right
 
 
 def test_grid_voxels_stand_on_the_cells():

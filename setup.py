@@ -20,11 +20,14 @@ model_files = [
     if os.path.isdir(d) and os.path.basename(d) != 'source'
 ]
 
-# Image maps: maps/<name>/, a map .yaml and its image (config.resolve_map).
+# Image maps: maps/<name>/<name>.yaml and its image (config.resolve_map), with everything
+# else in that folder and below it, such as a Gazebo scenery's models/ (gazebo.map_scenery).
 image_map_files = [
-    (f'share/{package_name}/{d}', sorted(f for f in glob(f'{d}/*') if os.path.isfile(f)))
+    (f'share/{package_name}/{root}', sorted(os.path.join(root, f) for f in files))
     for d in sorted(glob('maps/*'))
-    if os.path.isdir(d)
+    if os.path.isfile(os.path.join(d, os.path.basename(d) + '.yaml'))
+    for root, _, files in sorted(os.walk(d))
+    if files
 ]
 
 setup(
@@ -37,7 +40,8 @@ setup(
         ('share/' + package_name + '/config', glob('config/*.rviz')),
         *config_files,
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
-        ('share/' + package_name + '/maps', glob('maps/*.bt')),
+        # Octomaps, and the meshes Gazebo draws for them (hero_sim/gazebo.py map_mesh).
+        ('share/' + package_name + '/maps', glob('maps/*.bt') + glob('maps/*.stl')),
         *image_map_files,
         *model_files,
     ],
@@ -51,6 +55,7 @@ setup(
             'sim_attach = hero_sim.attach:main',
             'robot_models = hero_sim.robot_models:main',
             'tether_sim = hero_sim.tether_sim:main',
+            'gazebo_bridge = hero_sim.gazebo_bridge:main',
         ],
     },
 )
