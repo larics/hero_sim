@@ -1,0 +1,20 @@
+# larry: one herover for Larry, the talking robot (~/crazy_shit/rocky), to drive.
+#
+#   bash start.sh larry.yaml                        # sim + RViz
+#   python3 /root/rocky/ros/larry_drive.py          # second terminal, same container
+#
+# Larry (robot_voice.py --robot sim, outside the container) sends relative moves to
+# larry_drive over UDP 127.0.0.1:8765; larry_drive drives /herover_1/cmd_vel and steers
+# on /herover_1/odom. See rocky's README, "Wheels in the simulator".
+
+ground_robots:
+  - name: herover_1
+    pose: {x: 1.0, y: 1.5, yaw: -1.5708}  # m, m, rad: in the living room, facing the sofa and TV
+    drive: omni
+    model: herover
+    camera: true                        # /herover_1/camera/image_raw, needs Gazebo (README "Cameras")
+
+sim:
+  map: small_house                      # AWS RoboMaker's furnished Small House, 19 x 11 m: bedroom,
+                                        # living room, dining room and kitchen, sunroom
+  map_model: true                       # RViz draws the house's furniture too, not just the octomap
