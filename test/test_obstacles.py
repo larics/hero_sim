@@ -292,14 +292,14 @@ def test_grid_voxels_stand_on_the_cells():
 
 def test_image_map_octomap_reads_back_as_the_same_walls(tmp_path):
     pytest.importorskip('PIL')
-    path = MAPS_DIR / 'simple_maze_10x10' / 'simple_maze_10x10.yaml'
+    path = MAPS_DIR / 'simple_maze_4x4' / 'simple_maze_4x4.yaml'
     bt = write_image_map(tmp_path / 'new' / 'maze.bt', path)
     res, boxes = read_bt(bt)
     occupied = read_image_map(path)[0]
-    assert res == 0.05 and len(boxes) == occupied.sum() * 40  # walls 2 m tall, 5 cm voxels
+    assert res == 0.02 and len(boxes) == occupied.sum() * 100  # walls 2 m tall, 2 cm voxels
     flat = ObstacleMap.from_bt(bt, 0.2, 2.0, max_radius=0.5)
     image = ObstacleMap.from_image(path, max_radius=0.5)
-    for x, y in np.random.default_rng(0).uniform(-5.5, 5.5, (300, 2)):
+    for x, y in np.random.default_rng(0).uniform(-2.2, 2.2, (300, 2)):
         assert flat.clearance(x, y) == pytest.approx(image.clearance(x, y), abs=res)
 
 
@@ -309,9 +309,9 @@ def test_write_image_map_without_walls(tmp_path):
 
 def test_load_image_map():
     pytest.importorskip('PIL')
-    m = load(dict(config.SIM_DEFAULTS, map=str(MAPS_DIR / 'empty_3x3' / 'empty_3x3.yaml')), [0.3])
-    assert m.res == 0.05
-    assert m.clearance(1.47, 0.0) == 0.0  # the east wall: x 1.45..1.5
+    m = load(dict(config.SIM_DEFAULTS, map=str(MAPS_DIR / 'empty_4x4' / 'empty_4x4.yaml')), [0.3])
+    assert m.res == 0.02
+    assert m.clearance(1.99, 0.0) == 0.0  # the east wall: x 1.98..2.0
     assert m.clearance(0.0, 0.0) == math.inf
     x, _ = m.move(0.0, 0.0, 3.0, 0.0, 0.3)
-    assert 1.45 - 0.3 - 0.05 <= x <= 1.45 - 0.3
+    assert 1.98 - 0.3 - 0.02 <= x <= 1.98 - 0.3

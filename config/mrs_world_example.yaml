@@ -1,4 +1,4 @@
-# MRS course example: six herovers on an image map, maps/simple_maze_10x10.
+# MRS course example: six herovers on an image map, maps/simple_maze_4x4.
 #
 #   bash start.sh mrs_world_example.yaml
 #
@@ -7,13 +7,13 @@
 # drive: omni can drive sideways, diff can't
 # model: herover or scout
 ground_robots:
-  - {name: herover_1, pose: {x: -4.0, y: -4.0, yaw: 0.0}, drive: omni, model: herover}
-  - {name: herover_2, pose: {x: -3.0, y: -4.0, yaw: 0.0}, drive: omni, model: herover}
-  - {name: herover_3, pose: {x: -2.0, y: -4.0, yaw: 0.0}, drive: omni, model: herover}
-  - {name: herover_4, pose: {x: -4.0, y: -3.0, yaw: 0.0}, drive: omni, model: herover}
-  - {name: herover_5, pose: {x: -3.0, y: -3.0, yaw: 0.0}, drive: omni, model: herover}
-  - {name: herover_6, pose: {x: -2.0, y: -3.0, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_1, pose: {x: -1.6, y: -1.7, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_2, pose: {x: -1.1, y: -1.7, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_3, pose: {x: -0.6, y: -1.7, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_4, pose: {x: -1.6, y: -1.3, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_5, pose: {x: -1.1, y: -1.3, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_6, pose: {x: -0.6, y: -1.3, yaw: 0.0}, drive: omni, model: herover}
 
 sim:
-  map: simple_maze_10x10   # a map from hero_sim, or the full path to your own map's .yaml
+  map: simple_maze_4x4     # a map from hero_sim, or the full path to your own map's .yaml
   collision: true          # robots stop at walls and at each other. false: they pass through

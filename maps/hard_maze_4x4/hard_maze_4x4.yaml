@@ -1,0 +1,6 @@
+image: hard_maze_4x4.bmp
+resolution: 0.02
+origin: [-2.0, -2.0, 0.0]
+occupied_thresh: 0.8
+free_thresh: 0.2
+negate: 0

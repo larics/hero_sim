@@ -203,8 +203,8 @@ def test_shipped_maps_resolve_by_name(monkeypatch):
     monkeypatch.setattr(config, 'share_dir', lambda: CONFIG_DIR.parent)
     maps = CONFIG_DIR.parent / 'maps'
     assert config.resolve_map('icuas26_1') == str(maps / 'icuas26_1.bt')
-    assert config.resolve_map('hard_maze_10x10') == str(
-        maps / 'hard_maze_10x10' / 'hard_maze_10x10.yaml')
+    assert config.resolve_map('hard_maze_4x4') == str(
+        maps / 'hard_maze_4x4' / 'hard_maze_4x4.yaml')
 
 
 SHIPPED = sorted(CONFIG_DIR.rglob('*.yaml'))

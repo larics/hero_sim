@@ -75,7 +75,7 @@ What's in the world comes from one of three places:
 | | Set it with | In RViz |
 |---|---|---|
 | An octomap | `sim: {map: icuas26_1}`: a map from `maps/`, or the path to any octomap `.bt` file. `icuas26_1` is the default | occupied cells |
-| An image | `sim: {map: hard_maze_10x10}`: a map from `maps/`, or the path to any map `.yaml` (see below) | occupied cells, as walls 2 m tall |
+| An image | `sim: {map: hard_maze_4x4}`: a map from `maps/`, or the path to any map `.yaml` (see below) | occupied cells, as walls 2 m tall |
 | Pillars | an `obstacles:` list, on an empty floor | occupied cells, plus a cylinder for each pillar |
 
 A scenario uses only one of them: with `obstacles:` there's no map, and setting both is an error. For an empty floor with nothing on it, set `sim: {map: null}` and leave out `obstacles:`.
@@ -83,10 +83,10 @@ A scenario uses only one of them: with `obstacles:` there's no map, and setting 
 An image map is a picture of the floor seen from above, where dark pixels are walls. It comes as two files, in the format ROS `map_server` uses (so maps saved by nav2's `map_saver` or `slam_toolbox` work too):
 
 ```yaml
-# maps/hard_maze_10x10/hard_maze_10x10.yaml
-image: hard_maze_10x10.bmp    # next to this file: .bmp, .png or .pgm
-resolution: 0.05              # m per pixel
-origin: [-5.0, -5.0, 0.0]     # x, y of the image's bottom-left corner (m); rotation must be 0
+# maps/hard_maze_4x4/hard_maze_4x4.yaml
+image: hard_maze_4x4.bmp      # next to this file: .bmp, .png or .pgm
+resolution: 0.02              # m per pixel
+origin: [-2.0, -2.0, 0.0]     # x, y of the image's bottom-left corner (m); rotation must be 0
 occupied_thresh: 0.8          # a pixel darker than this (0 white .. 1 black) is a wall
 negate: 0                     # 1: light pixels are walls instead
 ```
@@ -95,11 +95,11 @@ Outside the image is open floor. The maps that come with hero_sim:
 
 | Map | Size | |
 |---|---|---|
-| `empty_3x3`, `empty_10x10` | 3 × 3 m, 10 × 10 m | walls around the edge only |
-| `simple_maze_10x10` | 10 × 10 m | three walls splitting the floor |
-| `hard_maze_10x10` | 10 × 10 m | a maze, open at the top and bottom |
-| `random_10x10` | 10 × 10 m | scattered boxes and posts |
-| `test_10x10` | 10 × 10 m | mixed shapes: boxes, discs, triangles, posts |
+| `empty_4x4` | 4 × 4 m | walls around the edge only |
+| `simple_maze_4x4` | 4 × 4 m | three walls splitting the floor |
+| `hard_maze_4x4` | 4 × 4 m | a maze, open at the top and bottom |
+| `random_4x4` | 4 × 4 m | scattered boxes and posts |
+| `test_4x4` | 4 × 4 m | mixed shapes: boxes, discs, triangles, posts |
 
 To add your own, put `<name>.yaml` and its image in `maps/<name>/` and rebuild, or give the path to the `.yaml`.
 
