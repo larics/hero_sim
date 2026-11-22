@@ -183,6 +183,8 @@ def test_map_mesh_image_map_walls(tmp_path):
                                            y0 + (rows.max() + 1) * res,
                                            obstacles.MAP_WALL_HEIGHT))
     assert faces
+    low = gazebo.map_mesh({'map': str(yaml_path), 'wall_height': 0.5}, tmp_path / 'low.obj')
+    assert _read_obj(low)[0][:, 2].max() == pytest.approx(0.5)
 
 
 # ------------------------------------------------------------------- world

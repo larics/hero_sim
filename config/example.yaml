@@ -61,7 +61,8 @@ sim:
                              # small_house's furniture, icuas26_1's trees. Maps without one: octomap only
   # map: icuas26_1           # octomap: maps/<name>.bt, a path to a .bt, or null for none.
                              # Default icuas26_1; not together with obstacles: (below)
-  wall_height: 2.0           # m, how tall an image map's walls are in RViz; collisions ignore it
+  wall_height: 2.0           # m, how tall an image map's walls are in RViz and Gazebo;
+                             # collisions ignore it
   collision: true            # robots and the tether object stop where their footprint
                              # would hit a map obstacle or a pillar (obstacles: below);
                              # ground robots also stop at each other

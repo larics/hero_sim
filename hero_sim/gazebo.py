@@ -15,7 +15,7 @@ write_world builds the world from a scenario:
           its .bt or .yaml, whose models and lights go in as they are
           (maps/small_house/, see map_scenery). Else a mesh: an octomap's
           own .stl next to it (maps/icuas26_1.stl), or else its occupied
-          voxels; an image map's walls, obstacles.MAP_WALL_HEIGHT tall. Both
+          voxels; an image map's walls, sim.wall_height tall. Both
           as write_obj meshes. Pillars (a scenario's obstacles:) are cylinders
   robots  their RViz meshes (config.MODEL_MESHES), each in a model named
           after the robot. A model's origin is the robot's TF frame, at its
@@ -162,7 +162,8 @@ def map_mesh(sim, obj_path):
     if config.is_image_map(map_file):
         occupied, x0, y0, res = obstacles.read_image_map(map_file)
         filled = occupied.T[:, :, None]  # [row = y, col = x] -> [x, y, z]
-        origin, cell = (x0, y0, 0.0), (res, res, obstacles.MAP_WALL_HEIGHT)
+        origin = (x0, y0, 0.0)
+        cell = (res, res, sim.get('wall_height', obstacles.MAP_WALL_HEIGHT))
     else:
         mesh = Path(map_file).with_suffix('.stl')
         if mesh.is_file():

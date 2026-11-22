@@ -33,7 +33,7 @@ SIM_DEFAULTS = {
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map_model': False,          # RViz also draws the map's own 3D model (gazebo.map_visuals)
     'map': 'icuas26_1',          # name in maps/, path to a .bt or map .yaml, or null (resolve_map)
-    'wall_height': 2.0,          # m, an image map's walls in RViz; collisions ignore height
+    'wall_height': 2.0,          # m, an image map's walls in RViz and Gazebo; collisions ignore it
     'collision': True,           # stop robots at the map, pillars and each other (obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
     'gazebo': 'auto',            # Gazebo renders the cameras: auto | true | false (see gazebo_enabled)

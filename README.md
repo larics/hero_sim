@@ -210,7 +210,7 @@ The images are in the TF frame `<name>/camera_optical` (z forward, x right, y do
 
 Any setting can be changed: `camera: {width: 320, height: 240, rate: 30, hfov: 1.5, pose: {x: 0.12, z: 0.03, pitch: 0.3}}`. `pose` is where the camera sits in the robot's frame, in m from the top of the deck; `pitch` is in rad, and above 0 tilts it down. Try it with `bash start.sh camera_example.yaml`.
 
-The camera sees the floor, the map (an octomap's trees, an image map's walls 2 m tall, or the pillars; `small_house`'s furniture) and the other robots. It doesn't see the tether, grippers or docks.
+The camera sees the floor, the map (an octomap's trees, an image map's walls `sim.wall_height` tall, or the pillars; `small_house`'s furniture) and the other robots. It doesn't see the tether, grippers or docks.
 
 `sim: {gazebo_gui: true}` also opens Gazebo's own window.
 
