@@ -9,7 +9,7 @@ from hero_sim import config
 from hero_sim.config import Pillar
 from hero_sim.obstacles import (
     _KEY_ORIGIN, PILLAR_RES, ObstacleMap, grid_voxels, load, pillar_voxels, read_bt,
-    read_image_map, write_bt, write_image_map, write_pillar_map,
+    read_image_map, write_bt, write_image_map, write_map_server_yaml, write_pillar_map,
 )
 
 MAPS_DIR = CONFIG_DIR.parent / 'maps'
@@ -313,6 +313,33 @@ def test_write_image_map_wall_height(tmp_path):
     for height, layers in ((config.SIM_DEFAULTS['wall_height'], 20), (0.5, 5)):
         res, boxes = read_bt(write_image_map(tmp_path / f'{height}.bt', path, height))
         assert res == 0.1 and sorted(boxes[:, 2] - _KEY_ORIGIN) == list(range(layers))
+
+
+def test_write_map_server_yaml_fills_in_what_map_server_requires(tmp_path):
+    pytest.importorskip('PIL')
+    path = image_map(tmp_path, [[0, 255]], origin=[0.5, -1.0])
+    copy = write_map_server_yaml(tmp_path / 'out' / 'm.yaml', path)
+    meta = yaml.safe_load(copy.read_text())
+    assert meta == {'image': str((tmp_path / 'm.png').resolve()), 'resolution': 0.1,
+                    'origin': [0.5, -1.0, 0.0], 'negate': 0, 'occupied_thresh': 0.65,
+                    'free_thresh': 0.25}
+
+
+def test_write_map_server_yaml_keeps_the_map_own_values(tmp_path):
+    pytest.importorskip('PIL')
+    path = image_map(tmp_path, [[0, 255]], negate=1, occupied_thresh=0.9, free_thresh=0.1,
+                     mode='scale')
+    meta = yaml.safe_load(write_map_server_yaml(tmp_path / 'c.yaml', path).read_text())
+    assert (meta['negate'], meta['occupied_thresh'], meta['free_thresh'], meta['mode']) == (
+        1, 0.9, 0.1, 'scale')
+
+
+@pytest.mark.parametrize('path', IMAGE_MAPS, ids=lambda p: p.parent.name)
+def test_map_server_copy_reads_as_the_same_map(path, tmp_path):
+    pytest.importorskip('PIL')
+    occupied, *rest = read_image_map(write_map_server_yaml(tmp_path / 'c.yaml', path))
+    original, *original_rest = read_image_map(path)
+    assert np.array_equal(occupied, original) and rest == original_rest
 
 
 def test_load_image_map():

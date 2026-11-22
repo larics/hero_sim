@@ -111,7 +111,17 @@ obstacles:                              # m
 
 The pillars are turned into an octomap, written to `/tmp/hero_sim/<scenario>_obstacles.bt`, and served just like a `.bt` map, with the same topics (`/octomap_binary`, `/projected_map`, ...). So RViz, and any code that reads the map, can't tell them apart. To keep a pillar map, copy that file and use it as `sim: {map: path/to/file.bt}` in another scenario. Image maps are served the same way, from `/tmp/hero_sim/<scenario>_map.bt`.
 
-The map is drawn when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
+An image map is also published as a 2D map on `/map` (`nav_msgs/OccupancyGrid`, by nav2's `map_server`): walls are 100 and the floor is 0, in the `world` frame, on the same grid the collisions use. Mid-grey pixels, which maps saved by `map_saver` use for unexplored space, are −1 (unknown) on `/map` but free floor for the collisions. Like any ROS map, `/map` is sent once, so subscribe with transient-local durability or you'll never receive it:
+
+```python
+from rclpy.qos import QoSProfile, DurabilityPolicy
+self.create_subscription(OccupancyGrid, '/map', self.on_map,
+                         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
+```
+
+In RViz, tick the *Image map (/map)* display. Octomaps and pillars have no `/map`; their `/projected_map` has only walls (100) and unknown (−1).
+
+The map is drawn, and `/map` published, when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
 
 ## Moving the robots
 

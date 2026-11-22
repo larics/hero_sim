@@ -40,6 +40,9 @@ _TREE_DEPTH = 16
 _KEY_ORIGIN = 1 << (_TREE_DEPTH - 1)  # octomap key of coordinate 0
 PILLAR_RES = 0.05  # m, cell size without a map; move() samples paths every half cell
 MAP_WALL_HEIGHT = config.SIM_DEFAULTS['wall_height']  # m, default for an image map's walls
+# An image map .yaml's optional keys, as read_image_map reads them when left out.
+# map_server requires them, so write_map_server_yaml fills them in.
+IMAGE_MAP_DEFAULTS = {'negate': 0, 'occupied_thresh': 0.65, 'free_thresh': 0.25}
 
 
 def read_bt(path):
@@ -120,12 +123,13 @@ def read_image_map(path):
     mode = meta.get('mode', 'trinary')
     if mode not in ('trinary', 'scale'):
         raise ValueError(f'{path}: mode {mode!r} is not supported, only trinary or scale')
-    threshold = float(meta.get('occupied_thresh', 0.65))
+    threshold = float(meta.get('occupied_thresh', IMAGE_MAP_DEFAULTS['occupied_thresh']))
     from PIL import Image  # only image maps need Pillow
     with Image.open(path.parent / meta['image']) as im:
         rgba = np.asarray(im.convert('RGBA'), dtype=float)
     gray = rgba[..., :3].mean(axis=2)
-    darkness = gray / 255.0 if meta.get('negate', 0) else (255.0 - gray) / 255.0
+    negate = meta.get('negate', IMAGE_MAP_DEFAULTS['negate'])
+    darkness = gray / 255.0 if negate else (255.0 - gray) / 255.0
     occupied = (darkness > threshold) & (rgba[..., 3] >= 128)
     return occupied[::-1], float(origin[0]), float(origin[1]), res
 
@@ -299,6 +303,26 @@ def write_image_map(path, map_file, height=MAP_WALL_HEIGHT):
         return None
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     write_bt(path, grid_voxels(occupied, x0, y0, res, height), res)
+    return path
+
+
+def write_map_server_yaml(path, map_file):
+    """Write a copy of an image map's .yaml that nav2's map_server can load. Returns path.
+
+    The copy names the image by its absolute path, gets a 0 yaw if its origin
+    is only [x, y], and gets the optional keys (IMAGE_MAP_DEFAULTS) that
+    map_server requires, so it reads the walls as read_image_map does. Dirs
+    are made as needed. Check map_file with read_image_map first.
+    """
+    map_file = Path(map_file)
+    with open(map_file) as f:
+        meta = yaml.safe_load(f)
+    origin = [float(v) for v in meta['origin']]
+    meta = {**IMAGE_MAP_DEFAULTS, **meta,
+            'image': str((map_file.parent / meta['image']).resolve()),
+            'origin': origin + [0.0] * (3 - len(origin))}
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(yaml.safe_dump(meta))
     return path
 
 
