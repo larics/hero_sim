@@ -119,7 +119,7 @@ self.create_subscription(OccupancyGrid, '/map', self.on_map,
                          QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
 ```
 
-In RViz, tick the *Image map (/map)* display. Octomaps and pillars have no `/map`; their `/projected_map` has only walls (100) and unknown (−1).
+RViz shows it in the *Image map (/map)* display, under the octomap's walls. Octomaps and pillars have no `/map`; their `/projected_map` has only walls (100) and unknown (−1).
 
 The map is drawn, and `/map` published, when you start with `start.sh`. Both kinds block the robots, see [Obstacles](#obstacles).
 
