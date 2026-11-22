@@ -307,6 +307,14 @@ def test_write_image_map_without_walls(tmp_path):
     assert write_image_map(tmp_path / 'm.bt', image_map(tmp_path, [[255, 255]])) is None
 
 
+def test_write_image_map_wall_height(tmp_path):
+    pytest.importorskip('PIL')
+    path = image_map(tmp_path, [[0, 255]])  # one wall cell, 0.1 m
+    for height, layers in ((config.SIM_DEFAULTS['wall_height'], 20), (0.5, 5)):
+        res, boxes = read_bt(write_image_map(tmp_path / f'{height}.bt', path, height))
+        assert res == 0.1 and sorted(boxes[:, 2] - _KEY_ORIGIN) == list(range(layers))
+
+
 def test_load_image_map():
     pytest.importorskip('PIL')
     m = load(dict(config.SIM_DEFAULTS, map=str(MAPS_DIR / 'empty_4x4' / 'empty_4x4.yaml')), [0.3])

@@ -5,7 +5,7 @@
 A scenario with obstacles: gets an octomap of its pillars, written to
 <tmp>/hero_sim/<config name>_obstacles.bt. Otherwise sim.map is served
 (config.resolve_map; null: no octomap): a .bt as it is, an image map as walls
-on its dark pixels, written to <tmp>/hero_sim/<config name>_map.bt. Either way
+sim.wall_height tall on its dark pixels, written to <tmp>/hero_sim/<config name>_map.bt. Either way
 RViz shows it the same.
 """
 from pathlib import Path
@@ -31,7 +31,8 @@ def _actions(context):
         if map_file is None:
             return [LogInfo(msg='[hero_sim] no obstacles: and sim.map is null: no octomap')]
         if config.is_image_map(map_file):
-            bt_file = obstacles.write_image_map(f'{out}_map.bt', map_file)
+            bt_file = obstacles.write_image_map(f'{out}_map.bt', map_file,
+                                                scenario.sim['wall_height'])
             if bt_file is None:
                 return [LogInfo(msg=f'[hero_sim] {map_file} has no occupied pixels: no octomap')]
             source = f'{map_file}, written to {bt_file}'

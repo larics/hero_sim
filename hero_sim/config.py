@@ -30,6 +30,7 @@ SIM_DEFAULTS = {
     'rviz': True,                # open RViz with config/sim.rviz
     'models': True,              # robot meshes in RViz (crazyflies + ground robots with a model)
     'map': 'icuas26_1',          # name in maps/, path to a .bt or map .yaml, or null (resolve_map)
+    'wall_height': 2.0,          # m, an image map's walls in RViz; collisions ignore height
     'collision': True,           # stop robots at the map, pillars and each other (obstacles.py)
     'collision_z': (0.2, 2.0),   # m, map heights counted as obstacles: trunks, not floor/canopy
 }
@@ -153,7 +154,7 @@ def parse(raw):
     sim_raw = raw.get('sim') or {}
     _check_keys(sim_raw, SIM_DEFAULTS, 'sim')
     sim = {**SIM_DEFAULTS, **sim_raw}
-    for key in ('ground_rate', 'ground_max_speed', 'ground_max_yaw_rate', 'cf_rate'):
+    for key in ('ground_rate', 'ground_max_speed', 'ground_max_yaw_rate', 'cf_rate', 'wall_height'):
         sim[key] = float(sim[key])
         if sim[key] <= 0.0:
             raise ValueError(f'sim.{key} must be > 0, got {sim[key]}')

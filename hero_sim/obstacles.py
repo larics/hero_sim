@@ -11,7 +11,7 @@ Two kinds of fixed obstacle, both in one ObstacleMap:
              image    a ROS map_server .yaml and its image (read_image_map):
                       each dark pixel is an obstacle cell. For RViz,
                       write_image_map extrudes them into an octomap of walls
-                      MAP_WALL_HEIGHT tall.
+                      sim.wall_height tall.
   pillars  the scenario's top-level obstacles: list, circles (x, y, radius)
            kept exact rather than gridded. A scenario has these or a map, not
            both. For RViz, write_pillar_map turns them into an octomap.
@@ -39,7 +39,7 @@ from hero_sim import config
 _TREE_DEPTH = 16
 _KEY_ORIGIN = 1 << (_TREE_DEPTH - 1)  # octomap key of coordinate 0
 PILLAR_RES = 0.05  # m, cell size without a map; move() samples paths every half cell
-MAP_WALL_HEIGHT = 2.0  # m, an image map's walls in its octomap; collisions ignore height
+MAP_WALL_HEIGHT = config.SIM_DEFAULTS['wall_height']  # m, default for an image map's walls
 
 
 def read_bt(path):

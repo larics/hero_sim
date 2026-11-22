@@ -113,6 +113,7 @@ def test_drive_is_case_insensitive():
     ('crazyflies: [{gripper: yes please}]', 'gripper must be true or false'),
     ('sim: {cf_hz: 5}', "sim: unknown key.*'cf_hz'"),
     ('sim: {ground_rate: 0}', 'ground_rate must be > 0'),
+    ('sim: {wall_height: 0}', 'wall_height must be > 0'),
     ('sim: {cf_battery_drain: -1}', 'cf_battery_drain must be >= 0'),
     ('sim: {attach: maybe}', 'attach must be auto, true or false'),
     ('sim: {collision: maybe}', 'collision must be true or false'),

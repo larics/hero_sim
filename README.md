@@ -75,7 +75,7 @@ What's in the world comes from one of three places:
 | | Set it with | In RViz |
 |---|---|---|
 | An octomap | `sim: {map: icuas26_1}`: a map from `maps/`, or the path to any octomap `.bt` file. `icuas26_1` is the default | occupied cells |
-| An image | `sim: {map: hard_maze_4x4}`: a map from `maps/`, or the path to any map `.yaml` (see below) | occupied cells, as walls 2 m tall |
+| An image | `sim: {map: hard_maze_4x4}`: a map from `maps/`, or the path to any map `.yaml` (see below) | occupied cells, as walls 2 m tall (`sim: {wall_height: 0.5}` for lower ones) |
 | Pillars | an `obstacles:` list, on an empty floor | occupied cells, plus a cylinder for each pillar |
 
 A scenario uses only one of them: with `obstacles:` there's no map, and setting both is an error. For an empty floor with nothing on it, set `sim: {map: null}` and leave out `obstacles:`.
