@@ -13,11 +13,11 @@
 #                         robot's frame (m, rad): x forward, z up from the top
 #                         of the deck; pitch > 0 tilts it down
 ground_robots:
-  - {name: herover_1, pose: {x: -4.0, y: -4.0, yaw: 0.0}, drive: omni, model: herover, camera: true}
-  - {name: herover_2, pose: {x: -2.8, y: -3.7, yaw: 2.5}, drive: omni, model: herover}
-  - {name: herover_3, pose: {x: -2.0, y: -4.4, yaw: 0.0}, drive: omni, model: herover}
+  - {name: herover_1, pose: {x: -1.6, y: -1.6, yaw: 0.0}, drive: omni, model: herover, camera: true}
+  - {name: herover_2, pose: {x: -1.12, y: -1.48, yaw: 2.5}, drive: omni, model: herover}
+  - {name: herover_3, pose: {x: -0.8, y: -1.76, yaw: 0.0}, drive: omni, model: herover}
 
 sim:
-  map: simple_maze_10x10
+  map: simple_maze_4x4
   collision: true
   gazebo_gui: false        # true: also open Gazebo's own window

@@ -173,7 +173,7 @@ def test_map_mesh_from_voxels_without_a_mesh(tmp_path):
 
 
 def test_map_mesh_image_map_walls(tmp_path):
-    yaml_path = MAPS / 'simple_maze_10x10' / 'simple_maze_10x10.yaml'
+    yaml_path = MAPS / 'simple_maze_4x4' / 'simple_maze_4x4.yaml'
     mesh = gazebo.map_mesh({'map': str(yaml_path)}, tmp_path / 'maze.obj')
     verts, faces = _read_obj(mesh)
     occupied, x0, y0, res = obstacles.read_image_map(yaml_path)
@@ -291,7 +291,7 @@ def test_no_scenery_without_an_sdf(tmp_path):
 
 def test_write_world_builds_the_map_mesh_next_to_it(tmp_path):
     s = parse('ground_robots: [{name: a, camera: true}]\nsim: {map: '
-              f'{MAPS / "simple_maze_10x10" / "simple_maze_10x10.yaml"}}}')
+              f'{MAPS / "simple_maze_4x4" / "simple_maze_4x4.yaml"}}}')
     path = gazebo.write_world(tmp_path / 'out' / 'x_world.sdf', s, MODELS)
     mesh = tmp_path / 'out' / 'x_world_map.obj'
     assert mesh.is_file()
@@ -416,7 +416,7 @@ def test_map_visuals_by_kind_of_map(tmp_path):
     assert len(house) > 80 and all(Path(v.mesh).is_file() for v in house if v.shape == 'mesh')
     trees, = gazebo.map_visuals({'map': str(MAPS / 'icuas26_1.bt')})
     assert trees.mesh == str(MAPS / 'icuas26_1.stl') and trees.color[:3] == gazebo.MAP_COLOR
-    maze = MAPS / 'simple_maze_10x10' / 'simple_maze_10x10.yaml'
+    maze = MAPS / 'simple_maze_4x4' / 'simple_maze_4x4.yaml'
     assert gazebo.map_visuals({'map': str(maze)}) == []
     assert gazebo.map_visuals({'map': str(MAPS / 'icuas26_2.bt')}) == []  # no mesh of its own
     assert gazebo.map_visuals({'map': None}) == []
