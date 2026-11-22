@@ -16,5 +16,5 @@ ground_robots:
 
 sim:
   map: simple_maze_4x4     # a map from hero_sim, or the full path to your own map's .yaml
-  wall_height: 0.5         # m, low enough to see the robots over the walls in RViz
+  wall_height: 0.1         # m, low enough to see the robots over the walls in RViz
   collision: true          # robots stop at walls and at each other. false: they pass through
