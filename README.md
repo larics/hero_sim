@@ -97,7 +97,7 @@ Outside the image is open floor. The maps that come with hero_sim:
 | Map | Size | |
 |---|---|---|
 | `empty_4x4` | 4 × 4 m | walls around the edge only |
-| `simple_maze_4x4` | 4 × 4 m | three walls splitting the floor |
+| `simple_maze_4x4` | 4 × 4 m | two walls splitting the floor |
 | `hard_maze_4x4` | 4 × 4 m | a maze, open at the top and bottom |
 | `random_4x4` | 4 × 4 m | scattered boxes and posts |
 | `test_4x4` | 4 × 4 m | mixed shapes: boxes, discs, triangles, posts |
