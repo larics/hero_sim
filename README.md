@@ -60,6 +60,7 @@ ground_robots:
     pose: {x: 0.0, y: 0.0, yaw: 0.0}    # m, m, rad
     drive: omni                         # omni (can move sideways) or diff (can't)
     model: herover                      # herover or scout
+    radius: 0.17                        # the collision dimension of robots (sphere)
 
 crazyflies:                             # named cf_1, cf_2, ... in this order
   - pose: {x: 1.0, y: 0.0, z: 0.03}
